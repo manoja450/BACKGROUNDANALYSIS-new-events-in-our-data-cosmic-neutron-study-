@@ -24,6 +24,9 @@
 #include <ctime>
 #include <TGraph.h>
 #include <TPad.h>
+#include <TLine.h>
+#include <TLatex.h>
+#include <TBox.h>
 
 using std::cout;
 using std::endl;
@@ -1077,16 +1080,75 @@ int main(int argc, char *argv[]) {
     c->SaveAs(plotName.c_str());
     cout << "Saved plot: " << plotName << endl;
 
-    // Delta t Low to Muon with fit
+    // Delta t Low to Muon with fit - UPDATED TO MATCH THE UPLOADED IMAGE
     c->Clear();
+    c->SetCanvasSize(1200, 800);
+    c->SetLeftMargin(0.12);
+    c->SetRightMargin(0.08);
+    c->SetBottomMargin(0.12);
+    c->SetTopMargin(0.08);
+    
+    // Configure histogram style
     h_dt_low_muon->SetLineWidth(2);
     h_dt_low_muon->SetLineColor(kBlack);
+    h_dt_low_muon->SetFillColor(kGray);
+    h_dt_low_muon->SetFillStyle(3001);
+    h_dt_low_muon->GetXaxis()->SetTitle("#Delta t [#mus]");
+    h_dt_low_muon->GetYaxis()->SetTitle("Events");
+    h_dt_low_muon->GetXaxis()->SetTitleSize(0.05);
+    h_dt_low_muon->GetYaxis()->SetTitleSize(0.05);
+    h_dt_low_muon->GetXaxis()->SetLabelSize(0.04);
+    h_dt_low_muon->GetYaxis()->SetLabelSize(0.04);
+    h_dt_low_muon->SetTitle("At: Low Energy Isolated to Muon");
+    
+    // Draw histogram
     h_dt_low_muon->Draw("HIST");
-
+    
+    // Define signal and sideband regions
+    const double signal_min = 10.0;
+    const double signal_max = 300.0;
+    const double sideband_min = 1000.0;
+    const double sideband_max = 1285.0;
+    
+    // Create shaded regions for signal and sideband
+    TBox *signal_box = new TBox(signal_min, 0, signal_max, h_dt_low_muon->GetMaximum() * 1.05);
+    TBox *sideband_box = new TBox(sideband_min, 0, sideband_max, h_dt_low_muon->GetMaximum() * 1.05);
+    
+    signal_box->SetFillColor(kRed);
+    signal_box->SetFillStyle(3001);
+    signal_box->SetLineColor(kRed);
+    
+    sideband_box->SetFillColor(kBlue);
+    sideband_box->SetFillStyle(3001);
+    sideband_box->SetLineColor(kBlue);
+    
+    signal_box->Draw("same");
+    sideband_box->Draw("same");
+    
+    // Redraw histogram on top to make it visible
+    h_dt_low_muon->Draw("HIST same");
+    
+    // Add text labels for signal and sideband regions
+    TLatex *tex_signal = new TLatex((signal_min + signal_max) / 2, h_dt_low_muon->GetMaximum() * 0.9, "Signal Region");
+    TLatex *tex_sideband = new TLatex((sideband_min + sideband_max) / 2, h_dt_low_muon->GetMaximum() * 0.8, "Sideband");
+    
+    tex_signal->SetTextColor(kRed);
+    tex_sideband->SetTextColor(kBlue);
+    tex_signal->SetTextAlign(15);
+    tex_sideband->SetTextAlign(15);
+    tex_signal->SetTextSize(0.04);
+    tex_sideband->SetTextSize(0.04);
+    
+    tex_signal->Draw();
+    tex_sideband->Draw();
+    
+    // Perform exponential fit
     TF1* expFit_low_muon = nullptr;
+    double tau_value = 234.90; 
+    
     if (h_dt_low_muon->GetEntries() > 5) {
         // Define a new two-parameter exponential fit function without constant term
-        TF1* expFit_low_muon = new TF1("expFit_low_muon", "[0]*exp(-x/[1])", 0, 1200);
+        expFit_low_muon = new TF1("expFit_low_muon", "[0]*exp(-x/[1])", 0, 1200);
         expFit_low_muon->SetParNames("N_{0}", "#tau");
         
         // Initial parameter estimates
@@ -1104,9 +1166,11 @@ int main(int argc, char *argv[]) {
         expFit_low_muon->SetLineColor(kRed);
         expFit_low_muon->SetLineWidth(3);
         expFit_low_muon->Draw("SAME");
-
+        
+        // Get the fitted tau value
+        tau_value = expFit_low_muon->GetParameter(1);
+        
         // Print fit results
-        double tau = expFit_low_muon->GetParameter(1);
         double tau_err = expFit_low_muon->GetParError(1);
         double N0 = expFit_low_muon->GetParameter(0);
         double N0_err = expFit_low_muon->GetParError(0);
@@ -1116,17 +1180,23 @@ int main(int argc, char *argv[]) {
 
         cout << "Exponential Fit Results (Low to Muon dt, 0-1200 µs):\n";
         cout << Form("N_{0} = %.1f ± %.1f", N0, N0_err) << endl;
-        cout << Form("τ = %.4f ± %.4f µs", tau, tau_err) << endl;
+        cout << Form("τ = %.4f ± %.4f µs", tau_value, tau_err) << endl;
         cout << Form("χ²/NDF = %.4f", chi2_ndf) << endl;
         cout << "----------------------------------------" << endl;
     }
-
+    
+    
     c->Update();
     plotName = OUTPUT_DIR + "/DeltaT_Low_to_Muon.png";
     c->SaveAs(plotName.c_str());
     cout << "Saved plot: " << plotName << endl;
 
+    // Clean up
     if (expFit_low_muon) delete expFit_low_muon;
+    delete signal_box;
+    delete sideband_box;
+    delete tex_signal;
+    delete tex_sideband;
 
     // Sideband subtraction
     c->Clear();
