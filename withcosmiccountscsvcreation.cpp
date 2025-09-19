@@ -1150,7 +1150,7 @@ int main(int argc, char *argv[]) {
 
     h_dt_low_muon->Draw("HIST same");
 
-    TLatex *tex_signal = new TLatex((signal_min + signal_max) / 2, h_dt_low_muon->GetMaximum() * 0.8, "Signal Region");
+    TLatex *tex_signal = new TLatex((signal_min + signal_max) / 2, h_dt_low_muon->GetMaximum() * 0.9, "Signal Region");
     TLatex *tex_sideband = new TLatex((sideband_min + sideband_max) / 2, h_dt_low_muon->GetMaximum() * 0.6, "Sideband");
 
     tex_signal->SetTextColor(kRed);
