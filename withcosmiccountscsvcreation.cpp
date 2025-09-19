@@ -11,6 +11,10 @@
 #include <TLegend.h>
 #include <TPaveStats.h>
 #include <TGaxis.h>
+#include <TPaveText.h>
+#include <TBox.h>
+#include <TLatex.h>
+#include <TParameter.h>
 #include <iostream>
 #include <fstream>
 #include <vector>
@@ -24,12 +28,9 @@
 #include <ctime>
 #include <TGraph.h>
 #include <TPad.h>
-#include <TLine.h>
-#include <TLatex.h>
-#include <TBox.h>
-#include <TParameter.h>
 
 using std::cout;
+using std::cerr;
 using std::endl;
 using namespace std;
 
@@ -46,6 +47,13 @@ const double MICHEL_ENERGY_MAX_DT = 500; // Max PMT energy for dt plots (p.e.)
 const double MICHEL_DT_MIN = 0.76;      // Min time after muon for Michel (µs)
 const double MICHEL_DT_MAX = 16.0;      // Max time after muon for Michel (µs)
 const int ADCSIZE = 45;                 // Number of ADC samples per waveform
+const double LOW_ENERGY_DT_MIN = 16.0;  // Min time after muon for low-energy isolated events (µs)
+const std::vector<double> SIDE_VP_THRESHOLDS = {750, 950, 1200, 1400, 550, 700, 700, 500}; // Channels 12-19 (ADC)
+const double TOP_VP_THRESHOLD = 450; // Original threshold
+const double FIT_MIN = 1.0; // Fit range min for Michel dt (µs)
+const double FIT_MAX = 16.0; // Fit range max for Michel dt (µs)
+const double FIT_MIN_LOW_MUON = 16.0; // Fit range min for low to muon dt (µs)
+const double FIT_MAX_LOW_MUON = 1200.0; // Fit range max for low to muon dt (µs, narrowed)
 
 // Generate unique output directory with timestamp
 string getTimestamp() {
@@ -56,11 +64,6 @@ string getTimestamp() {
     return string(buffer);
 }
 const string OUTPUT_DIR = "./AnalysisOutput_" + getTimestamp();
-
-const std::vector<double> SIDE_VP_THRESHOLDS = {750, 950, 1200, 1400, 550, 700, 700, 500}; // Channels 12-19 (ADC)
-const double TOP_VP_THRESHOLD = 450; // Original threshold
-const double FIT_MIN = 1.0; // Fit range min (µs)
-const double FIT_MAX = 16.0; // Fit range max (µs)
 
 // Pulse structure
 struct pulse {
@@ -286,6 +289,35 @@ void saveCosmicFluxToCSV(const std::map<Long64_t, int>& cosmic_counts, const str
     cout << "Saved cosmic flux data: " << filename << endl;
 }
 
+// Function to save daily cosmic ray averages to a CSV file
+void saveDailyCosmicFluxToCSV(const std::vector<std::pair<Long64_t, int>>& file_infos, const string& outputDir) {
+    string filename = outputDir + "/CosmicFlux_AllDays.csv";
+    ofstream csv_file(filename);
+    if (!csv_file) {
+        cerr << "Error: Could not open file " << filename << endl;
+        return;
+    }
+    csv_file << "Date,DailyCount\n";
+    size_t num = file_infos.size();
+    for (size_t i = 0; i < num; i += 24) {
+        int sum = 0;
+        size_t group_size = 0;
+        Long64_t first_ts = file_infos[i].first;
+        for (size_t j = 0; j < 24 && i + j < num; j++) {
+            sum += file_infos[i + j].second;
+            group_size++;
+        }
+        double avg = static_cast<double>(sum) / group_size;
+        time_t now = static_cast<time_t>(first_ts);
+        struct tm *t = localtime(&now);
+        char buffer[11];
+        strftime(buffer, sizeof(buffer), "%Y-%m-%d", t);
+        csv_file << buffer << "," << avg << "\n";
+    }
+    csv_file.close();
+    cout << "Saved daily cosmic flux data: " << filename << endl;
+}
+
 int main(int argc, char *argv[]) {
     if (argc < 3) {
         cout << "Usage: " << argv[0] << " <calibration_file> <input_file1> [<input_file2> ...]" << endl;
@@ -298,10 +330,28 @@ int main(int argc, char *argv[]) {
         inputFiles.push_back(argv[i]);
     }
 
+    // Sort input files by starttime
+    std::vector<std::pair<Long64_t, string>> file_times;
+    for (const auto& file : inputFiles) {
+        TFile f_tmp(file.c_str());
+        if (f_tmp.IsZombie()) {
+            cerr << "Warning: Cannot open " << file << " for timestamp sorting, skipping" << endl;
+            f_tmp.Close();
+            continue;
+        }
+        auto tsstart = (TParameter<Long64_t>*)f_tmp.Get("starttime");
+        Long64_t ts = tsstart ? tsstart->GetVal() : 0;
+        f_tmp.Close();
+        file_times.emplace_back(ts, file);
+    }
+    std::sort(file_times.begin(), file_times.end());
+    inputFiles.clear();
+    for (const auto& ft : file_times) inputFiles.push_back(ft.second);
+
     createOutputDirectory(OUTPUT_DIR);
 
     cout << "Calibration file: " << calibFileName << endl;
-    cout << "Input files:" << endl;
+    cout << "Input files (sorted by starttime):\n";
     for (const auto& file : inputFiles) {
         cout << "  " << file << endl;
     }
@@ -338,6 +388,7 @@ int main(int argc, char *argv[]) {
     int num_michels = 0;
     int num_events = 0;
     int num_cosmic_events = 0;
+    int num_low_iso = 0;
 
     std::map<int, int> trigger_counts;
 
@@ -345,43 +396,32 @@ int main(int argc, char *argv[]) {
     TH1D* h_muon_energy = new TH1D("muon_energy", "Muon Energy Distribution (with Michel Electrons);Energy (p.e.);Counts/100 p.e.", 550, -500, 5000);
     TH1D* h_muon_all = new TH1D("muon_all", "All Muon Energy Distribution;Energy (p.e.);Counts/100 p.e.", 550, -500, 5000);
     TH1D* h_michel_energy = new TH1D("michel_energy", "Michel Electron Energy Distribution;Energy (p.e.);Counts/8 p.e.", 100, 0, 800);
-    TH1D* h_dt_michel = new TH1D("DeltaT", "Muon-Michel Time Difference ;Time to Previous event(Muon)(#mus);Counts/0.08 #mus", 200, 0, MICHEL_DT_MAX);
+    TH1D* h_dt_michel = new TH1D("DeltaT", "Muon-Michel Time Difference;Time to Previous event(Muon)(#mus);Counts/0.08 #mus", 200, 0, MICHEL_DT_MAX);
     TH2D* h_energy_vs_dt = new TH2D("energy_vs_dt", "Michel Energy vs Time Difference;dt (#mus);Energy (p.e.)", 160, 0, 16, 200, 0, 1000);
     TH1D* h_side_vp_muon = new TH1D("side_vp_muon", "Side Veto Energy for Muons;Energy (ADC);Counts", 200, 0, 5000);
     TH1D* h_top_vp_muon = new TH1D("top_vp_muon", "Top Veto Energy for Muons;Energy (ADC);Counts", 200, 0, 1000);
     TH1D* h_trigger_bits = new TH1D("trigger_bits", "Trigger Bits Distribution;Trigger Bits;Counts", 36, 0, 36);
-    
-    // New histograms for presentation plots
     TH1D* h_isolated_pe = new TH1D("isolated_pe", "Sum PEs Isolated Events;Photoelectrons;Events", 200, 0, 2000);
     TH1D* h_low_iso = new TH1D("low_iso", "Sum PEs Low Energy Isolated Events;Photoelectrons;Events", 100, 0, 100);
-    TH1D* h_high_iso = new TH1D("high_iso", "Sum PEs High Energy Isolated Events;Photoelectrons;Events", 100, 100, 1000);
-    TH1D* h_dt_prompt_delayed = new TH1D("dt_prompt_delayed", "#Delta t High Energy (prompt) to Low Energy (delayed);#Delta t [#mus];Events", 100, 0, 10000);
+    TH1D* h_high_iso = new TH1D("high_iso", "Sum PEs High Energy Isolated Events;Photoelectrons;Events", 100, 0, 1000);
+    TH1D* h_dt_prompt_delayed = new TH1D("dt_prompt_delayed", "#Delta t High Energy (prompt) to Low Energy (delayed);#Delta t [#mus];Events", 120, 0, 1200);
     TH1D* h_dt_low_muon = new TH1D("dt_low_muon", "#Delta t Low Energy Isolated to Muon Veto Tagged Events;#Delta t [#mus];Events", 120, 0, 1200);
     TH1D* h_low_pe_signal = new TH1D("low_pe_signal", "Low Energy Signal Region;Photoelectrons;Events", 100, 0, 100);
     TH1D* h_low_pe_sideband = new TH1D("low_pe_sideband", "Low Energy Sideband;Photoelectrons;Events", 100, 0, 100);
-    
-    // Additional plot for isolated events >=40 p.e.
     TH1D* h_isolated_ge40 = new TH1D("isolated_ge40", "Sum PEs Isolated Events (>=40 p.e.);Photoelectrons;Events", 200, 40, 2000);
-    
+
     // Histograms for veto panels (12-21)
-    TH1D* h_veto_panel[10]; // 10 veto panels: 12-21
+    TH1D* h_veto_panel[10];
     const char* veto_names[10] = {
-        "Veto Panel 12 ", "Veto Panel 13", "Veto Panel 14", "Veto Panel 15",
-        "Veto Panel 16 ", "Veto Panel 17", "Veto Panel 18", "Veto Panel 19",
-        "Veto Panel 20 ", "Veto Panel 21"
+        "Veto Panel 12", "Veto Panel 13", "Veto Panel 14", "Veto Panel 15",
+        "Veto Panel 16", "Veto Panel 17", "Veto Panel 18", "Veto Panel 19",
+        "Veto Panel 20", "Veto Panel 21"
     };
-    
-    // Initialize veto panel histograms
+
     for (int i = 0; i < 10; i++) {
-        if (i < 8) {
-            h_veto_panel[i] = new TH1D(Form("h_veto_panel_%d", i+12), 
-                Form("%s;Energy (ADC);Counts", veto_names[i]), 
-                200, 0, 8000);
-        } else {
-            h_veto_panel[i] = new TH1D(Form("h_veto_panel_%d", i+12), 
-                Form("%s;Energy (ADC);Counts", veto_names[i]), 
-                200, 0, 8000);
-        }
+        h_veto_panel[i] = new TH1D(Form("h_veto_panel_%d", i+12), 
+                                   Form("%s;Energy (ADC);Counts", veto_names[i]), 
+                                   200, 0, 8000);
     }
 
     // Declare last times outside the loop to carry over across files
@@ -393,13 +433,15 @@ int main(int argc, char *argv[]) {
     std::set<double> michel_muon_times;
 
     // Global cosmic counts across all files (keyed by hour start timestamp)
-    std::map<Long64_t, int> cosmic_counts; // Hour start timestamp -> count of cosmic events
+    std::map<Long64_t, int> cosmic_counts;
+
+    // Vector to store per-file cosmic info for daily calculation
+    std::vector<std::pair<Long64_t, int>> file_cosmic_infos;
 
     // Set of excluded trigger bits for cosmic events
     const std::set<int> excluded_triggers = {1, 3, 4, 8, 16, 33, 35};
 
     for (const auto& inputFileName : inputFiles) {
-        // Check if input file exists
         if (gSystem->AccessPathName(inputFileName.c_str())) {
             cout << "Could not open file: " << inputFileName << ". Skipping..." << endl;
             continue;
@@ -417,7 +459,6 @@ int main(int argc, char *argv[]) {
             time_t rawtime = (time_t)run_starttime;
             struct tm *timeinfo = localtime(&rawtime);
             cout << "Run Start Time (Local Time): " << asctime(timeinfo);
-            // Round starttime to the start of the hour
             timeinfo->tm_min = 0;
             timeinfo->tm_sec = 0;
             run_starttime = mktime(timeinfo);
@@ -446,7 +487,6 @@ int main(int argc, char *argv[]) {
         Long64_t nsTime;
         Int_t triggerBits;
 
-        // Set branch addresses
         t->SetBranchAddress("eventID", &eventID);
         t->SetBranchAddress("nSamples", nSamples);
         t->SetBranchAddress("adcVal", adcVal);
@@ -461,24 +501,28 @@ int main(int argc, char *argv[]) {
         int numEntries = t->GetEntries();
         cout << "Processing " << numEntries << " entries in " << inputFileName << endl;
 
-        // Count cosmic events for this file
         int file_cosmic_count = 0;
+        double last_event_time = -1;
 
-        // First pass per file
         for (int iEnt = 0; iEnt < numEntries; iEnt++) {
             t->GetEntry(iEnt);
             num_events++;
 
-            // Fill triggerBits histogram and track counts
+            // Check for non-monotonic event times
+            if (nsTime < last_event_time) {
+                cerr << "Warning: Non-increasing event time in file " << inputFileName 
+                     << ", event " << eventID << ": " << nsTime << " < " << last_event_time << endl;
+            }
+            last_event_time = nsTime;
+
             h_trigger_bits->Fill(triggerBits);
             trigger_counts[triggerBits]++;
             if (triggerBits < 0 || triggerBits > 36) {
                 cout << "Warning: triggerBits = " << triggerBits << " out of histogram range (0-36) in file " << inputFileName << ", event " << eventID << endl;
             }
 
-            // Initialize pulse
             struct pulse p;
-            p.start = nsTime / 1000.0; // Convert ns to µs
+            p.start = nsTime / 1000.0;
             p.end = p.start;
             p.peak = 0;
             p.energy = 0;
@@ -501,15 +545,13 @@ int main(int argc, char *argv[]) {
 
             bool pulse_at_end = false;
             int pulse_at_end_count = 0;
-            std::vector<double> veto_energies(10, 0); // Channels 12-21
+            std::vector<double> veto_energies(10, 0);
 
             for (int iChan = 0; iChan < 23; iChan++) {
-                // Fill waveform histogram
                 for (int i = 0; i < ADCSIZE; i++) {
                     h_wf.SetBinContent(i + 1, adcVal[iChan][i] - baselineMean[iChan]);
                 }
 
-                // Check beam status (channel 22)
                 if (iChan == 22) {
                     double ev61_energy = 0;
                     for (int iBin = 1; iBin <= ADCSIZE; iBin++) {
@@ -520,7 +562,6 @@ int main(int argc, char *argv[]) {
                     }
                 }
 
-                // Pulse detection
                 std::vector<pulse_temp> pulses_temp;
                 bool onPulse = false;
                 int thresholdBin = 0, peakBin = 0;
@@ -545,7 +586,7 @@ int main(int argc, char *argv[]) {
                         }
                         if (iBinContent < BS_UNCERTAINTY || iBin == ADCSIZE) {
                             pulse_temp pt;
-                            pt.start = thresholdBin * 16.0 / 1000.0; // Convert ns to µs
+                            pt.start = thresholdBin * 16.0 / 1000.0;
                             pt.peak = iChan <= 11 && mu1[iChan] > 0 ? peak / mu1[iChan] : peak;
                             pt.end = iBin * 16.0 / 1000.0;
                             for (int j = peakBin - 1; j >= 1 && h_wf.GetBinContent(j) > BS_UNCERTAINTY; j--) {
@@ -564,7 +605,6 @@ int main(int argc, char *argv[]) {
                             }
                             pulses_temp.push_back(pt);
                             peak = 0;
-                            peakBin = 0;
                             pulseEnergy = 0;
                             thresholdBin = 0;
                             onPulse = false;
@@ -572,7 +612,6 @@ int main(int argc, char *argv[]) {
                     }
                 }
 
-                // Store energy for veto panels (ADC)
                 if (iChan >= 12 && iChan <= 19) {
                     side_vp_energy.push_back(allPulseEnergy);
                     veto_energies[iChan - 12] = allPulseEnergy;
@@ -588,7 +627,6 @@ int main(int argc, char *argv[]) {
                     }
                 }
 
-                // Check for pulses at waveform end
                 if (iChan <= 11 && h_wf.GetBinContent(ADCSIZE) > 100) {
                     pulse_at_end_count++;
                     if (pulse_at_end_count >= 10) pulse_at_end = true;
@@ -597,7 +635,6 @@ int main(int argc, char *argv[]) {
                 h_wf.Reset();
             }
 
-            // Aggregate pulse properties
             p.start += mostFrequent(all_chan_start);
             p.end += mostFrequent(all_chan_end);
             p.energy = std::accumulate(all_chan_energy.begin(), all_chan_energy.end(), 0.0);
@@ -606,7 +643,6 @@ int main(int argc, char *argv[]) {
             p.top_vp_energy = std::accumulate(top_vp_energy.begin(), top_vp_energy.end(), 0.0);
             p.all_vp_energy = p.side_vp_energy + p.top_vp_energy;
 
-            // Check timing consistency
             for (const auto& start : all_chan_start) {
                 if (fabs(start - mostFrequent(all_chan_start)) < 10 * 16.0 / 1000.0) {
                     chan_starts_no_outliers.push_back(start);
@@ -614,7 +650,6 @@ int main(int argc, char *argv[]) {
             }
             p.single = (variance(chan_starts_no_outliers) < 5 * 16.0 / 1000.0);
 
-            // Determine if veto was hit
             bool veto_hit = false;
             for (size_t i = 0; i < SIDE_VP_THRESHOLDS.size(); i++) {
                 if (veto_energies[i] > SIDE_VP_THRESHOLDS[i]) {
@@ -624,17 +659,14 @@ int main(int argc, char *argv[]) {
             }
             if (!veto_hit && p.top_vp_energy > TOP_VP_THRESHOLD) veto_hit = true;
 
-            // Determine if veto is low (opposite of veto_hit for isolated/Michel)
             bool veto_low = !veto_hit;
 
-            // Cosmic ray event detection
             bool is_cosmic = !p.beam && excluded_triggers.find(p.trigger) == excluded_triggers.end();
             if (is_cosmic) {
                 num_cosmic_events++;
                 file_cosmic_count++;
             }
 
-            // Muon detection
             if ((p.energy > MUON_ENERGY_THRESHOLD && veto_hit) ||
                 (pulse_at_end && p.energy > MUON_ENERGY_THRESHOLD / 2 && veto_hit)) {
                 p.is_muon = true;
@@ -652,10 +684,8 @@ int main(int argc, char *argv[]) {
                 }
             }
 
-            // Beam-off condition
             bool is_beam_off = ((p.trigger & 1) == 0) && (p.trigger != 4) && (p.trigger != 8) && (p.trigger != 16) && !p.beam;
 
-            // Michel electron detection
             double dt = p.start - last_muon_time;
             bool is_michel_candidate = is_beam_off &&
                                       p.energy >= MICHEL_ENERGY_MIN &&
@@ -681,40 +711,39 @@ int main(int argc, char *argv[]) {
 
             p.last_muon_time = last_muon_time;
 
-            // Isolated events detection
             bool is_isolated = is_beam_off &&
                                !p.is_muon &&
                                !p.is_michel &&
-                               p.number >= 8 &&
                                veto_low &&
                                p.single &&
                                p.energy > 0;
 
             if (is_isolated) {
-                h_isolated_pe->Fill(p.energy);
-                if (p.energy >= 40) {
-                    h_isolated_ge40->Fill(p.energy);
-                }
-                if (p.energy > 100) {
+                if (p.energy > 100 && p.number >= 8) {
                     h_high_iso->Fill(p.energy);
+                    h_isolated_pe->Fill(p.energy);
+                    h_isolated_ge40->Fill(p.energy);
                     last_high_time = p.start;
-                } else {
-                    h_low_iso->Fill(p.energy);
-                    if (p.energy < 18) {
-                        cout << "Debug: Low-energy isolated event - Energy = " << p.energy 
-                             << ", Multiplicity = " << p.number << ", Time = " << p.start << endl;
-                    }
-                    // Delta t to previous high (prompt to delayed)
+                } else if (p.energy <= 100 && p.number >= 4) {
+                    num_low_iso++;
                     double dt_high = p.start - last_high_time;
-                    if (dt_high > 0) {
+                    double dt_muon = p.start - last_muon_time;
+                    cout << "Debug: Low-energy isolated event - EventID=" << eventID 
+                         << ", Energy=" << p.energy 
+                         << ", Multiplicity=" << p.number 
+                         << ", Time=" << p.start 
+                         << ", dt_high=" << dt_high 
+                         << ", dt_muon=" << dt_muon << endl;
+                    if (dt_high >= 0 && dt_high <= 1200) {
                         h_dt_prompt_delayed->Fill(dt_high);
                     }
-                    // Delta t to previous muon
-                    double dt_muon = p.start - last_muon_time;
-                    if (dt_muon > 0) {
+                    h_low_iso->Fill(p.energy);
+                    if (p.energy >= 40) {
+                        h_isolated_ge40->Fill(p.energy);
+                    }
+                    if (dt_muon >= LOW_ENERGY_DT_MIN) {
                         h_dt_low_muon->Fill(dt_muon);
                     }
-                    // For sideband subtraction (using dt to muon)
                     if (dt_muon > 10 && dt_muon < 300) {
                         h_low_pe_signal->Fill(p.energy);
                     }
@@ -725,50 +754,59 @@ int main(int argc, char *argv[]) {
             }
         }
 
-        // Assign all cosmic events in this file to its hour bin
         if (file_cosmic_count > 0) {
             cosmic_counts[run_starttime] += file_cosmic_count;
         }
+
+        file_cosmic_infos.push_back({run_starttime, file_cosmic_count});
 
         f->Close();
         delete f;
     }
 
-    // Save cosmic flux data after processing all files
     if (!cosmic_counts.empty()) {
         saveCosmicFluxToCSV(cosmic_counts, OUTPUT_DIR);
     } else {
         cerr << "Error: No valid cosmic events or starttime found in any input file. Skipping CSV output." << endl;
     }
 
-    // Second pass: Fill h_muon_energy for muons associated with Michel electrons (across all files)
+    if (!file_cosmic_infos.empty()) {
+        saveDailyCosmicFluxToCSV(file_cosmic_infos, OUTPUT_DIR);
+    } else {
+        cerr << "Error: No file cosmic info available for daily CSV." << endl;
+    }
+
     for (const auto& muon : muon_candidates) {
         if (michel_muon_times.find(muon.first) != michel_muon_times.end()) {
             h_muon_energy->Fill(muon.second);
         }
     }
 
-    // Print global stats
     cout << "Global Statistics:\n";
     cout << "Total Events: " << num_events << "\n";
     cout << "Muons Detected: " << num_muons << "\n";
     cout << "Michel Electrons Detected: " << num_michels << "\n";
+    cout << "Low-Energy Isolated Events: " << num_low_iso << "\n";
+    cout << "Prompt-Delayed Pairs (h_dt_prompt_delayed entries): " << h_dt_prompt_delayed->GetEntries() << "\n";
     cout << "Cosmic Ray Events Detected: " << num_cosmic_events << "\n";
     cout << "------------------------\n";
 
-    // Print triggerBits distribution
     cout << "Trigger Bits Distribution (all files):\n";
     for (const auto& pair : trigger_counts) {
         cout << "Trigger " << pair.first << ": " << pair.second << " events\n";
     }
     cout << "------------------------\n";
 
-    // Generate analysis plots
+    // Debug: Print h_dt_low_muon bin contents
+    cout << "h_dt_low_muon entries: " << h_dt_low_muon->GetEntries() << endl;
+    cout << "Events in 16-100 µs: " << h_dt_low_muon->Integral(h_dt_low_muon->FindBin(16.0), h_dt_low_muon->FindBin(100.0)) << endl;
+    cout << "Events in 100-500 µs: " << h_dt_low_muon->Integral(h_dt_low_muon->FindBin(100.0), h_dt_low_muon->FindBin(500.0)) << endl;
+    cout << "Events in 500-1200 µs: " << h_dt_low_muon->Integral(h_dt_low_muon->FindBin(500.0), h_dt_low_muon->FindBin(1200.0)) << endl;
+
     TCanvas *c = new TCanvas("c", "Analysis Plots", 1200, 800);
     gStyle->SetOptStat(1111);
     gStyle->SetOptFit(1111);
 
-    // Muon Energy (with Michels)
     c->Clear();
     h_muon_energy->SetLineColor(kBlue);
     h_muon_energy->Draw();
@@ -777,7 +815,6 @@ int main(int argc, char *argv[]) {
     c->SaveAs(plotName.c_str());
     cout << "Saved plot: " << plotName << endl;
 
-    // All Muon Energy
     c->Clear();
     h_muon_all->SetLineColor(kBlue);
     h_muon_all->Draw();
@@ -786,7 +823,6 @@ int main(int argc, char *argv[]) {
     c->SaveAs(plotName.c_str());
     cout << "Saved plot: " << plotName << endl;
 
-    // Michel Energy
     c->Clear();
     h_michel_energy->SetLineColor(kRed);
     h_michel_energy->Draw();
@@ -795,7 +831,6 @@ int main(int argc, char *argv[]) {
     c->SaveAs(plotName.c_str());
     cout << "Saved plot: " << plotName << endl;
 
-    // Michel dt with exponential fit
     c->Clear();
     h_dt_michel->SetLineWidth(2);
     h_dt_michel->SetLineColor(kBlack);
@@ -804,12 +839,10 @@ int main(int argc, char *argv[]) {
 
     TF1* expFit = nullptr;
     if (h_dt_michel->GetEntries() > 5) {
-        // Initial parameter estimates
         double integral = h_dt_michel->Integral(h_dt_michel->FindBin(FIT_MIN), h_dt_michel->FindBin(FIT_MAX));
         double bin_width = h_dt_michel->GetBinWidth(1);
         double N0_init = integral * bin_width / (FIT_MAX - FIT_MIN);
         double C_init = 0;
-        // Estimate constant background from last bins (12-16 µs)
         int bin_12 = h_dt_michel->FindBin(12.0);
         int bin_16 = h_dt_michel->FindBin(16.0);
         double min_content = 1e9;
@@ -820,7 +853,6 @@ int main(int argc, char *argv[]) {
         if (min_content < 1e9) C_init = min_content;
         else C_init = 0.1;
 
-        // Create and configure fit function
         expFit = new TF1("expFit", ExpFit, FIT_MIN, FIT_MAX, 3);
         expFit->SetParameters(N0_init, 2.2, C_init);
         expFit->SetParLimits(0, 0, N0_init * 100);
@@ -830,11 +862,9 @@ int main(int argc, char *argv[]) {
         expFit->SetLineColor(kRed);
         expFit->SetLineWidth(3);
 
-        // Perform fit and draw on top
         int fitStatus = h_dt_michel->Fit(expFit, "RE+", "SAME", FIT_MIN, FIT_MAX);
         expFit->Draw("SAME");
-        
-        // Update stats box
+
         gPad->Update();
         TPaveStats *stats = (TPaveStats*)h_dt_michel->FindObject("stats");
         if (stats) {
@@ -843,16 +873,8 @@ int main(int argc, char *argv[]) {
             stats->SetY1NDC(0.6);
             stats->SetY2NDC(0.9);
             stats->SetTextColor(kRed);
-            stats->Clear();
-            stats->AddText("DeltaT");
-            stats->AddText(Form("#tau = %.4f #pm %.4f #mus", expFit->GetParameter(1), expFit->GetParError(1)));
-            stats->AddText(Form("#chi^{2}/NDF = %.4f", expFit->GetChisquare() / expFit->GetNDF()));
-            stats->AddText(Form("N_{0} = %.1f #pm %.1f", expFit->GetParameter(0), expFit->GetParError(0)));
-            stats->AddText(Form("C = %.1f #pm %.1f", expFit->GetParameter(2), expFit->GetParError(2)));
-            stats->Draw();
         }
-        
-        // Print fit results
+
         double N0 = expFit->GetParameter(0);
         double N0_err = expFit->GetParError(0);
         double tau = expFit->GetParameter(1);
@@ -876,37 +898,25 @@ int main(int argc, char *argv[]) {
     }
 
     c->Update();
-    c->Modified();
-    c->RedrawAxis();
     plotName = OUTPUT_DIR + "/Michel_dt.png";
     c->SaveAs(plotName.c_str());
     cout << "Saved plot: " << plotName << endl;
-    
-    // Clean up fit function
-    if (expFit) {
-        delete expFit;
-        expFit = nullptr;
-    }
 
-    // Compare different exponential fit start times
+    if (expFit) delete expFit;
+
     if (h_dt_michel->GetEntries() > 5) {
-        // Clear any existing functions from previous fits
         h_dt_michel->GetListOfFunctions()->Clear();
-        
-        // Define fit start times (1.0 to 4.0 μs in 0.5 μs steps)
         std::vector<double> fit_starts = {1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0};
         std::vector<double> taus, tau_errs, chi2ndfs;
         int best_index = -1;
         double min_chi2ndf = 1e9;
-        
-        // Perform fits for each start time
+
         for (int i = 0; i < fit_starts.size(); i++) {
             double fit_start = fit_starts[i];
             double fit_end = 16.0;
-            
+
             TF1* expFit_var = new TF1(Form("expFit_var_%.1f", fit_start), ExpFit, fit_start, fit_end, 3);
-            
-            // Estimate background from last bins (12-16 μs)
+
             double C_init = 0;
             int bin_12 = h_dt_michel->FindBin(12.0);
             int bin_16 = h_dt_michel->FindBin(16.0);
@@ -917,71 +927,61 @@ int main(int argc, char *argv[]) {
             }
             if (min_content < 1e9) C_init = min_content;
             else C_init = 0.1;
-            
-            // Estimate initial parameters
+
             double integral = h_dt_michel->Integral(h_dt_michel->FindBin(fit_start), h_dt_michel->FindBin(fit_end));
             double bin_width = h_dt_michel->GetBinWidth(1);
             double N0_init = (integral * bin_width - C_init * (fit_end - fit_start)) / 2.2;
             if (N0_init < 0) N0_init = 100;
-            
-            // Configure fit function
+
             expFit_var->SetParameters(N0_init, 2.2, C_init);
             expFit_var->SetParNames("N_{0}", "#tau", "C");
             expFit_var->SetParLimits(0, 0, N0_init * 100);
             expFit_var->SetParLimits(1, 0.1, 20.0);
             expFit_var->SetParLimits(2, -C_init * 10, C_init * 10);
-            
-            // Perform fit (quietly)
+
             int fitStatus = h_dt_michel->Fit(expFit_var, "QRN+", "", fit_start, fit_end);
-            
-            // Record results
+
             double tau = expFit_var->GetParameter(1);
             double tau_err = expFit_var->GetParError(1);
             double chi2 = expFit_var->GetChisquare();
             int ndf = expFit_var->GetNDF();
             double chi2ndf = (ndf > 0) ? chi2 / ndf : 999;
-            
+
             taus.push_back(tau);
             tau_errs.push_back(tau_err);
             chi2ndfs.push_back(chi2ndf);
-            
-            if (chi2ndf < min_chi2ndf && fitStatus == 0) { 
+
+            if (chi2ndf < min_chi2ndf && fitStatus == 0) {
                 min_chi2ndf = chi2ndf;
                 best_index = i;
             }
-            
-            // Print fit results for this range
+
             cout << Form("Fit Range %.1f-%.1f µs:\n", fit_start, fit_end);
             cout << "Fit Status: " << fitStatus << " (0 = success)\n";
             cout << Form("τ = %.4f ± %.4f µs", tau, tau_err) << endl;
             cout << Form("χ²/NDF = %.4f", chi2ndf) << endl;
             cout << "----------------------------------------" << endl;
-            
+
             delete expFit_var;
         }
-        
-        // Print best fit result
+
         if (best_index >= 0) {
             cout << Form("Best Fit Range: %.1f-16.0 µs\n", fit_starts[best_index]);
             cout << Form("τ = %.4f ± %.4f µs", taus[best_index], tau_errs[best_index]) << endl;
             cout << Form("χ²/NDF = %.4f (minimum)", chi2ndfs[best_index]) << endl;
             cout << "----------------------------------------" << endl;
         }
-        
-        // Create comparison plot
+
         TCanvas* c_comp = new TCanvas("c_comp", "Fit Start Time Comparison", 1200, 800);
         c_comp->SetGrid();
-        
-        // Create pad for the main plot
+
         TPad* pad = new TPad("pad", "pad", 0, 0, 1, 1);
         pad->Draw();
         pad->cd();
-        
-        // Create graphs
+
         TGraph* g_chi2 = new TGraph(fit_starts.size(), &fit_starts[0], &chi2ndfs[0]);
         TGraph* g_tau = new TGraph(fit_starts.size(), &fit_starts[0], &taus[0]);
-        
-        // Configure chi2 graph (left axis)
+
         g_chi2->SetTitle("Fit Start Time Comparison");
         g_chi2->GetXaxis()->SetTitle("Fit Start Time (#mus)");
         g_chi2->GetYaxis()->SetTitle("#chi^{2}/ndf");
@@ -989,38 +989,31 @@ int main(int argc, char *argv[]) {
         g_chi2->SetMarkerColor(kBlue);
         g_chi2->SetLineColor(kBlue);
         g_chi2->SetLineWidth(2);
-        
-        // Configure tau graph (right axis)
+
         g_tau->SetMarkerStyle(22);
         g_tau->SetMarkerColor(kRed);
         g_tau->SetLineColor(kRed);
         g_tau->SetLineWidth(2);
-        
-        // Draw chi2 first to establish the frame
+
         g_chi2->Draw("APL");
-        
-        // Create right axis
+
         pad->Update();
         double ymin = pad->GetUymin();
         double ymax = pad->GetUymax();
-        
-        // Scale tau values to match chi2 plot range
+
         double tau_min = *min_element(taus.begin(), taus.end());
         double tau_max = *max_element(taus.begin(), taus.end());
         double scale = (ymax - ymin)/(tau_max - tau_min);
         double offset = ymin - tau_min * scale;
-        
-        // Scale the tau graph
+
         for (int i = 0; i < g_tau->GetN(); i++) {
             double x, y;
             g_tau->GetPoint(i, x, y);
             g_tau->SetPoint(i, x, y * scale + offset);
         }
-        
-        // Draw tau graph on same pad
+
         g_tau->Draw("PL same");
-        
-        // Create right axis
+
         TGaxis* axis = new TGaxis(gPad->GetUxmax(), gPad->GetUymin(),
                                  gPad->GetUxmax(), gPad->GetUymax(),
                                  tau_min, tau_max, 510, "+L");
@@ -1029,19 +1022,16 @@ int main(int argc, char *argv[]) {
         axis->SetTitle("#tau (#mus)");
         axis->SetTitleColor(kRed);
         axis->Draw();
-        
-        // Add legend
+
         TLegend* leg = new TLegend(0.7, 0.7, 0.9, 0.9);
         leg->AddEntry(g_chi2, "#chi^{2}/ndf", "lp");
         leg->AddEntry(g_tau, "#tau", "lp");
         leg->Draw();
-        
-        // Save plot
+
         string compPlotName = OUTPUT_DIR + "/FitStartComparison.png";
         c_comp->SaveAs(compPlotName.c_str());
         cout << "Saved comparison plot: " << compPlotName << endl;
-        
-        // Clean up
+
         delete g_chi2;
         delete g_tau;
         delete leg;
@@ -1052,7 +1042,6 @@ int main(int argc, char *argv[]) {
         cout << "Skipping fit start comparison - insufficient entries in dt histogram" << endl;
     }
 
-    // Energy vs dt
     c->Clear();
     h_energy_vs_dt->SetStats(0);
     h_energy_vs_dt->GetXaxis()->SetTitle("dt (#mus)");
@@ -1062,7 +1051,6 @@ int main(int argc, char *argv[]) {
     c->SaveAs(plotName.c_str());
     cout << "Saved plot: " << plotName << endl;
 
-    // Side Veto Muon
     c->Clear();
     h_side_vp_muon->SetLineColor(kMagenta);
     h_side_vp_muon->Draw();
@@ -1071,7 +1059,6 @@ int main(int argc, char *argv[]) {
     c->SaveAs(plotName.c_str());
     cout << "Saved plot: " << plotName << endl;
 
-    // Top Veto Muon
     c->Clear();
     h_top_vp_muon->SetLineColor(kCyan);
     h_top_vp_muon->Draw();
@@ -1080,7 +1067,6 @@ int main(int argc, char *argv[]) {
     c->SaveAs(plotName.c_str());
     cout << "Saved plot: " << plotName << endl;
 
-    // Trigger Bits Distribution
     c->Clear();
     h_trigger_bits->SetLineColor(kGreen);
     h_trigger_bits->Draw();
@@ -1088,11 +1074,9 @@ int main(int argc, char *argv[]) {
     plotName = OUTPUT_DIR + "/TriggerBits_Distribution.png";
     c->SaveAs(plotName.c_str());
     cout << "Saved plot: " << plotName << endl;
-    
-    // Create veto panel plots (individual and combined)
+
     createVetoPanelPlots(h_veto_panel, OUTPUT_DIR);
 
-    // Isolated PE
     c->Clear();
     h_isolated_pe->SetLineColor(kBlack);
     h_isolated_pe->Draw();
@@ -1101,7 +1085,6 @@ int main(int argc, char *argv[]) {
     c->SaveAs(plotName.c_str());
     cout << "Saved plot: " << plotName << endl;
 
-    // Low Energy Isolated
     c->Clear();
     h_low_iso->SetLineColor(kBlack);
     h_low_iso->Draw();
@@ -1110,7 +1093,6 @@ int main(int argc, char *argv[]) {
     c->SaveAs(plotName.c_str());
     cout << "Saved plot: " << plotName << endl;
 
-    // High Energy Isolated
     c->Clear();
     h_high_iso->SetLineColor(kBlack);
     h_high_iso->Draw();
@@ -1119,7 +1101,6 @@ int main(int argc, char *argv[]) {
     c->SaveAs(plotName.c_str());
     cout << "Saved plot: " << plotName << endl;
 
-    // Delta t High to Low
     c->Clear();
     h_dt_prompt_delayed->SetLineColor(kBlack);
     h_dt_prompt_delayed->Draw();
@@ -1128,18 +1109,15 @@ int main(int argc, char *argv[]) {
     c->SaveAs(plotName.c_str());
     cout << "Saved plot: " << plotName << endl;
 
-    // Delta t Low to Muon with fit
-    c->Clear();
-    c->SetCanvasSize(1200, 800);
-    c->SetLeftMargin(0.12);
-    c->SetRightMargin(0.08);
-    c->SetBottomMargin(0.12);
-    c->SetTopMargin(0.08);
-    
-    // Configure histogram style
+    TCanvas *c_low_muon = new TCanvas("c_low_muon", "DeltaT Low to Muon", 1200, 800);
+    c_low_muon->SetLeftMargin(0.12);
+    c_low_muon->SetRightMargin(0.08);
+    c_low_muon->SetBottomMargin(0.12);
+    c_low_muon->SetTopMargin(0.08);
+
     h_dt_low_muon->SetLineWidth(2);
-    h_dt_low_muon->SetLineColor(kBlack);
-    h_dt_low_muon->SetFillColor(kGray);
+    h_dt_low_muon->SetLineColor(kBlue);
+    h_dt_low_muon->SetFillColor(kBlack); // Changed to red shade for histogram fill
     h_dt_low_muon->SetFillStyle(3001);
     h_dt_low_muon->GetXaxis()->SetTitle("#Delta t [#mus]");
     h_dt_low_muon->GetYaxis()->SetTitle("Events");
@@ -1147,105 +1125,115 @@ int main(int argc, char *argv[]) {
     h_dt_low_muon->GetYaxis()->SetTitleSize(0.05);
     h_dt_low_muon->GetXaxis()->SetLabelSize(0.04);
     h_dt_low_muon->GetYaxis()->SetLabelSize(0.04);
-    h_dt_low_muon->SetTitle("At: Low Energy Isolated to Muon");
-    
-    // Draw histogram
+    h_dt_low_muon->SetTitle("#Delta t: Low Energy Isolated to Muon");
+
     h_dt_low_muon->Draw("HIST");
-    
-    // Define signal and sideband regions
+
     const double signal_min = 10.0;
     const double signal_max = 300.0;
     const double sideband_min = 1000.0;
     const double sideband_max = 1285.0;
-    
-    // Create shaded regions for signal and sideband
+
     TBox *signal_box = new TBox(signal_min, 0, signal_max, h_dt_low_muon->GetMaximum() * 1.05);
     TBox *sideband_box = new TBox(sideband_min, 0, sideband_max, h_dt_low_muon->GetMaximum() * 1.05);
-    
+
     signal_box->SetFillColor(kRed);
     signal_box->SetFillStyle(3001);
     signal_box->SetLineColor(kRed);
-    
+
     sideband_box->SetFillColor(kBlue);
     sideband_box->SetFillStyle(3001);
     sideband_box->SetLineColor(kBlue);
-    
+
     signal_box->Draw("same");
     sideband_box->Draw("same");
-    
-    // Redraw histogram on top to make it visible
+
     h_dt_low_muon->Draw("HIST same");
-    
-    // Add text labels for signal and sideband regions
-    TLatex *tex_signal = new TLatex((signal_min + signal_max) / 2, h_dt_low_muon->GetMaximum() * 0.9, "Signal Region");
-    TLatex *tex_sideband = new TLatex((sideband_min + sideband_max) / 2, h_dt_low_muon->GetMaximum() * 0.8, "Sideband");
-    
+
+    TLatex *tex_signal = new TLatex((signal_min + signal_max) / 2, h_dt_low_muon->GetMaximum() * 0.8, "Signal Region");
+    TLatex *tex_sideband = new TLatex((sideband_min + sideband_max) / 2, h_dt_low_muon->GetMaximum() * 0.6, "Sideband");
+
     tex_signal->SetTextColor(kRed);
     tex_sideband->SetTextColor(kBlue);
-    tex_signal->SetTextAlign(15);
-    tex_sideband->SetTextAlign(15);
+    tex_signal->SetTextAlign(24);
+    tex_sideband->SetTextAlign(24);
     tex_signal->SetTextSize(0.04);
     tex_sideband->SetTextSize(0.04);
-    
+
     tex_signal->Draw();
     tex_sideband->Draw();
-    
-    // Perform exponential fit
+
     TF1* expFit_low_muon = nullptr;
-    double tau_value = 234.90; 
-    
-    if (h_dt_low_muon->GetEntries() > 5) {
-        // Define a new two-parameter exponential fit function without constant term
-        expFit_low_muon = new TF1("expFit_low_muon", "[0]*exp(-x/[1])", 0, 1200);
-        expFit_low_muon->SetParNames("N_{0}", "#tau");
-        
-        // Initial parameter estimates
-        double integral = h_dt_low_muon->Integral();
+    if (h_dt_low_muon->GetEntries() > 10) {
+        expFit_low_muon = new TF1("expFit_low_muon", ExpFit, FIT_MIN_LOW_MUON, FIT_MAX_LOW_MUON, 3);
+        expFit_low_muon->SetParNames("N_{0}", "#tau", "C");
+
+        double integral = h_dt_low_muon->Integral(h_dt_low_muon->FindBin(FIT_MIN_LOW_MUON), h_dt_low_muon->FindBin(FIT_MAX_LOW_MUON));
         double bin_width = h_dt_low_muon->GetBinWidth(1);
-        double N0_init = integral * bin_width / 234.9; // Using approximate tau from previous fit
-        expFit_low_muon->SetParameters(N0_init, 234.9);
-        expFit_low_muon->SetParLimits(0, 0, N0_init * 100); // Limit N0 to positive values
-        expFit_low_muon->SetParLimits(1, 0.1, 1200.0); // Limit tau to reasonable range
+        double C_init = 0;
+        int bin_400 = h_dt_low_muon->FindBin(400.0);
+        int bin_500 = h_dt_low_muon->FindBin(500.0);
+        double min_content = 1e9;
+        for (int i = bin_400; i <= bin_500; i++) {
+            double content = h_dt_low_muon->GetBinContent(i);
+            if (content > 0 && content < min_content) min_content = content;
+        }
+        if (min_content < 1e9) C_init = min_content;
+        else C_init = 0.1;
 
-        // Perform fit over full range (0-1200 µs)
-        h_dt_low_muon->Fit(expFit_low_muon, "RE+", "", 0, 1200);
+        double N0_init = (integral * bin_width - C_init * (FIT_MAX_LOW_MUON - FIT_MIN_LOW_MUON)) / 200.0;
+        if (N0_init <= 0) N0_init = 1.0;
 
-        // Draw the fit function
+        expFit_low_muon->SetParameters(N0_init, 200.0, C_init);
+        expFit_low_muon->SetParLimits(0, 0, N0_init * 100);
+        expFit_low_muon->SetParLimits(1, 0.1, 1000.0);
+        expFit_low_muon->SetParLimits(2, -C_init * 10, C_init * 10);
+
+        int fitStatus = h_dt_low_muon->Fit(expFit_low_muon, "RE+", "", FIT_MIN_LOW_MUON, FIT_MAX_LOW_MUON);
+
         expFit_low_muon->SetLineColor(kRed);
         expFit_low_muon->SetLineWidth(3);
         expFit_low_muon->Draw("SAME");
-        
-        // Get the fitted tau value
-        tau_value = expFit_low_muon->GetParameter(1);
-        
-        // Print fit results
-        double tau_err = expFit_low_muon->GetParError(1);
+
+        gPad->Update();
+        TPaveStats *stats = (TPaveStats*)h_dt_low_muon->FindObject("stats");
+        if (stats) {
+            stats->SetX1NDC(0.6);
+            stats->SetX2NDC(0.9);
+            stats->SetY1NDC(0.7); // Moved up to avoid overlap
+            stats->SetY2NDC(0.95); // Moved up to avoid overlap
+            stats->SetTextColor(kRed);
+        }
+
         double N0 = expFit_low_muon->GetParameter(0);
         double N0_err = expFit_low_muon->GetParError(0);
+        double tau = expFit_low_muon->GetParameter(1);
+        double tau_err = expFit_low_muon->GetParError(1);
+        double C = expFit_low_muon->GetParameter(2);
+        double C_err = expFit_low_muon->GetParError(2);
         double chi2 = expFit_low_muon->GetChisquare();
         int ndf = expFit_low_muon->GetNDF();
         double chi2_ndf = ndf > 0 ? chi2 / ndf : 0;
 
-        cout << "Exponential Fit Results (Low to Muon dt, 0-1200 µs):\n";
+        cout << "Exponential Fit Results (Low to Muon dt, " << FIT_MIN_LOW_MUON << "-" << FIT_MAX_LOW_MUON << " µs):\n";
+        cout << "Fit Status: " << fitStatus << " (0 = success)\n";
         cout << Form("N_{0} = %.1f ± %.1f", N0, N0_err) << endl;
-        cout << Form("τ = %.4f ± %.4f µs", tau_value, tau_err) << endl;
+        cout << Form("τ = %.4f ± %.4f µs", tau, tau_err) << endl;
+        cout << Form("C = %.1f ± %.1f", C, C_err) << endl;
         cout << Form("χ²/NDF = %.4f", chi2_ndf) << endl;
         cout << "----------------------------------------" << endl;
+    } else {
+        cout << "Warning: h_dt_low_muon has insufficient entries (" << h_dt_low_muon->GetEntries() 
+             << "), skipping exponential fit" << endl;
     }
-    
-    c->Update();
+
+    c_low_muon->Update();
     plotName = OUTPUT_DIR + "/DeltaT_Low_to_Muon.png";
-    c->SaveAs(plotName.c_str());
+    c_low_muon->SaveAs(plotName.c_str());
     cout << "Saved plot: " << plotName << endl;
 
-    // Clean up
     if (expFit_low_muon) delete expFit_low_muon;
-    delete signal_box;
-    delete sideband_box;
-    delete tex_signal;
-    delete tex_sideband;
 
-    // Sideband subtraction
     c->Clear();
     TH1D* h_subtracted = (TH1D*)h_low_pe_signal->Clone("subtracted");
     h_subtracted->Add(h_low_pe_sideband, -1);
@@ -1267,7 +1255,6 @@ int main(int argc, char *argv[]) {
     delete h_subtracted;
     delete leg_sub;
 
-    // Additional plot: Isolated >=40 p.e.
     c->Clear();
     h_isolated_ge40->SetLineColor(kBlack);
     h_isolated_ge40->Draw();
@@ -1276,7 +1263,6 @@ int main(int argc, char *argv[]) {
     c->SaveAs(plotName.c_str());
     cout << "Saved plot: " << plotName << endl;
 
-    // Clean up
     delete h_muon_energy;
     delete h_muon_all;
     delete h_michel_energy;
@@ -1297,6 +1283,7 @@ int main(int argc, char *argv[]) {
         delete h_veto_panel[i];
     }
     delete c;
+    delete c_low_muon;
 
     cout << "Analysis complete. Results saved in " << OUTPUT_DIR << "/ (*.png, *.csv)" << endl;
     return 0;
