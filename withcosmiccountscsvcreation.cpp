@@ -34,7 +34,7 @@ using std::cerr;
 using std::endl;
 using namespace std;
 
-// Constants
+// Constants (unchanged except where noted)
 const int N_PMTS = 12;
 const int PMT_CHANNEL_MAP[12] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11};
 const int PULSE_THRESHOLD = 30;     // ADC threshold for pulse detection
@@ -65,7 +65,7 @@ string getTimestamp() {
 }
 const string OUTPUT_DIR = "./AnalysisOutput_" + getTimestamp();
 
-// Pulse structure
+// Pulse structure (unchanged)
 struct pulse {
     double start;          // Start time (µs)
     double end;            // End time (µs)
@@ -84,7 +84,7 @@ struct pulse {
     bool veto_hit[10];     // Which veto panels were hit (channels 12-21)
 };
 
-// Temporary pulse structure
+// Temporary pulse structure (unchanged)
 struct pulse_temp {
     double start;  // Start time (µs)
     double end;    // End time (µs)
@@ -92,7 +92,7 @@ struct pulse_temp {
     double energy; // Energy
 };
 
-// SPE fitting function
+// SPE fitting function (unchanged)
 Double_t SPEfit(Double_t *x, Double_t *par) {
     Double_t term1 = par[0] * exp(-0.5 * pow((x[0] - par[1]) / par[2], 2));
     Double_t term2 = par[3] * exp(-0.5 * pow((x[0] - par[4]) / par[5], 2));
@@ -101,12 +101,12 @@ Double_t SPEfit(Double_t *x, Double_t *par) {
     return term1 + term2 + term3 + term4;
 }
 
-// Exponential fit function: N0 * exp(-t/tau) + C (t, tau in µs)
+// Exponential fit function (unchanged)
 Double_t ExpFit(Double_t *x, Double_t *par) {
     return par[0] * exp(-x[0] / par[1]) + par[2];
 }
 
-// Utility functions
+// Utility functions (unchanged)
 template<typename T>
 double getAverage(const std::vector<T>& v) {
     if (v.empty()) return 0;
@@ -140,7 +140,7 @@ double variance(const std::vector<T>& v) {
     return sum / (v.size() - 1);
 }
 
-// Create output directory
+// Create output directory (unchanged)
 void createOutputDirectory(const string& dirName) {
     struct stat st;
     if (stat(dirName.c_str(), &st) != 0) {
@@ -154,7 +154,7 @@ void createOutputDirectory(const string& dirName) {
     }
 }
 
-// SPE calibration function
+// SPE calibration function (unchanged)
 void performCalibration(const string &calibFileName, Double_t *mu1, Double_t *mu1_err) {
     TFile *calibFile = TFile::Open(calibFileName.c_str());
     if (!calibFile || calibFile->IsZombie()) {
@@ -392,7 +392,7 @@ int main(int argc, char *argv[]) {
 
     std::map<int, int> trigger_counts;
 
-    // Define histograms
+    // Define histograms (modified h_dt_prompt_delayed)
     TH1D* h_muon_energy = new TH1D("muon_energy", "Muon Energy Distribution (with Michel Electrons);Energy (p.e.);Counts/100 p.e.", 550, -500, 5000);
     TH1D* h_muon_all = new TH1D("muon_all", "All Muon Energy Distribution;Energy (p.e.);Counts/100 p.e.", 550, -500, 5000);
     TH1D* h_michel_energy = new TH1D("michel_energy", "Michel Electron Energy Distribution;Energy (p.e.);Counts/8 p.e.", 100, 0, 800);
@@ -404,7 +404,7 @@ int main(int argc, char *argv[]) {
     TH1D* h_isolated_pe = new TH1D("isolated_pe", "Sum PEs Isolated Events;Photoelectrons;Events", 200, 0, 2000);
     TH1D* h_low_iso = new TH1D("low_iso", "Sum PEs Low Energy Isolated Events;Photoelectrons;Events", 100, 0, 100);
     TH1D* h_high_iso = new TH1D("high_iso", "Sum PEs High Energy Isolated Events;Photoelectrons;Events", 100, 0, 1000);
-    TH1D* h_dt_prompt_delayed = new TH1D("dt_prompt_delayed", "#Delta t High Energy (prompt) to Low Energy (delayed);#Delta t [#mus];Events", 120, 0, 1200);
+    TH1D* h_dt_prompt_delayed = new TH1D("dt_prompt_delayed", "#Delta t High Energy (prompt) to Low Energy (delayed);#Delta t [#mus];Events", 200, 0, 10000); // Modified to 10000 µs
     TH1D* h_dt_low_muon = new TH1D("dt_low_muon", "#Delta t Low Energy Isolated to Muon Veto Tagged Events;#Delta t [#mus];Events", 120, 0, 1200);
     TH1D* h_low_pe_signal = new TH1D("low_pe_signal", "Low Energy Signal Region;Photoelectrons;Events", 100, 0, 100);
     TH1D* h_low_pe_sideband = new TH1D("low_pe_sideband", "Low Energy Sideband;Photoelectrons;Events", 100, 0, 100);
@@ -440,6 +440,9 @@ int main(int argc, char *argv[]) {
 
     // Set of excluded trigger bits for cosmic events
     const std::set<int> excluded_triggers = {1, 3, 4, 8, 16, 33, 35};
+
+    // Counter for excluded low-energy isolated events
+    int excluded_low_iso = 0;
 
     for (const auto& inputFileName : inputFiles) {
         if (gSystem->AccessPathName(inputFileName.c_str())) {
@@ -734,9 +737,15 @@ int main(int argc, char *argv[]) {
                          << ", Time=" << p.start 
                          << ", dt_high=" << dt_high 
                          << ", dt_muon=" << dt_muon << endl;
-                    if (dt_high >= 0 && dt_high <= 1200) {
+                    
+                    // Fill h_dt_prompt_delayed for all low-energy isolated events
+                    if (dt_high >= 0 && dt_high <= 10000) {
                         h_dt_prompt_delayed->Fill(dt_high);
+                    } else {
+                        h_dt_prompt_delayed->Fill(10000); // Overflow bin for invalid dt_high
+                        excluded_low_iso++;
                     }
+                    
                     h_low_iso->Fill(p.energy);
                     if (p.energy >= 40) {
                         h_isolated_ge40->Fill(p.energy);
@@ -781,6 +790,12 @@ int main(int argc, char *argv[]) {
             h_muon_energy->Fill(muon.second);
         }
     }
+
+    // Verify histogram entries
+    cout << "h_low_iso entries: " << h_low_iso->GetEntries() << endl;
+    cout << "h_dt_prompt_delayed entries: " << h_dt_prompt_delayed->GetEntries() << endl;
+    cout << "num_low_iso: " << num_low_iso << endl;
+    cout << "Excluded low-energy isolated events from h_dt_prompt_delayed (dt_high < 0 or > 10000 µs): " << excluded_low_iso << endl;
 
     cout << "Global Statistics:\n";
     cout << "Total Events: " << num_events << "\n";
