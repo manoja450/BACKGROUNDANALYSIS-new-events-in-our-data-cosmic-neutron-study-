@@ -753,7 +753,7 @@ int main(int argc, char *argv[]) {
                     if (dt_muon >= LOW_ENERGY_DT_MIN) {
                         h_dt_low_muon->Fill(dt_muon);
                     }
-                    if (dt_muon > 10 && dt_muon < 300) {
+                    if (dt_muon > 16 && dt_muon < 300) {
                         h_low_pe_signal->Fill(p.energy);
                     }
                     if (dt_muon > 1000 && dt_muon < 1285) {
@@ -1132,7 +1132,7 @@ int main(int argc, char *argv[]) {
 
     h_dt_low_muon->SetLineWidth(2);
     h_dt_low_muon->SetLineColor(kBlue);
-    h_dt_low_muon->SetFillColor(kBlack); // Changed to red shade for histogram fill
+    h_dt_low_muon->SetFillColor(kBlue);
     h_dt_low_muon->SetFillStyle(3001);
     h_dt_low_muon->GetXaxis()->SetTitle("#Delta t [#mus]");
     h_dt_low_muon->GetYaxis()->SetTitle("Events");
@@ -1143,40 +1143,6 @@ int main(int argc, char *argv[]) {
     h_dt_low_muon->SetTitle("#Delta t: Low Energy Isolated to Muon");
 
     h_dt_low_muon->Draw("HIST");
-
-    const double signal_min = 10.0;
-    const double signal_max = 300.0;
-    const double sideband_min = 1000.0;
-    const double sideband_max = 1285.0;
-
-    TBox *signal_box = new TBox(signal_min, 0, signal_max, h_dt_low_muon->GetMaximum() * 1.05);
-    TBox *sideband_box = new TBox(sideband_min, 0, sideband_max, h_dt_low_muon->GetMaximum() * 1.05);
-
-    signal_box->SetFillColor(kRed);
-    signal_box->SetFillStyle(3001);
-    signal_box->SetLineColor(kRed);
-
-    sideband_box->SetFillColor(kBlue);
-    sideband_box->SetFillStyle(3001);
-    sideband_box->SetLineColor(kBlue);
-
-    signal_box->Draw("same");
-    sideband_box->Draw("same");
-
-    h_dt_low_muon->Draw("HIST same");
-
-    TLatex *tex_signal = new TLatex((signal_min + signal_max) / 2, h_dt_low_muon->GetMaximum() * 0.9, "Signal Region");
-    TLatex *tex_sideband = new TLatex((sideband_min + sideband_max) / 2, h_dt_low_muon->GetMaximum() * 0.6, "Sideband");
-
-    tex_signal->SetTextColor(kRed);
-    tex_sideband->SetTextColor(kBlue);
-    tex_signal->SetTextAlign(24);
-    tex_sideband->SetTextAlign(24);
-    tex_signal->SetTextSize(0.04);
-    tex_sideband->SetTextSize(0.04);
-
-    tex_signal->Draw();
-    tex_sideband->Draw();
 
     TF1* expFit_low_muon = nullptr;
     if (h_dt_low_muon->GetEntries() > 10) {
@@ -1249,26 +1215,49 @@ int main(int argc, char *argv[]) {
 
     if (expFit_low_muon) delete expFit_low_muon;
 
-    c->Clear();
+    // Create larger canvas for the sideband subtraction plot
+    TCanvas *c_sideband = new TCanvas("c_sideband", "Low Energy Sideband Subtraction", 1200, 800);
+    c_sideband->SetLeftMargin(0.1);
+    c_sideband->SetRightMargin(0.1);
+    c_sideband->SetBottomMargin(0.1);
+    c_sideband->SetTopMargin(0.1);
+
     TH1D* h_subtracted = (TH1D*)h_low_pe_signal->Clone("subtracted");
     h_subtracted->Add(h_low_pe_sideband, -1);
     h_low_pe_signal->SetLineColor(kRed);
+    h_low_pe_signal->SetLineWidth(3);
     h_low_pe_sideband->SetLineColor(kBlue);
+    h_low_pe_sideband->SetLineWidth(3);
     h_subtracted->SetLineColor(kGreen);
+    h_subtracted->SetLineWidth(3);
+    
+    // Turn off stats box for all histograms
+    h_low_pe_signal->SetStats(0);
+    h_low_pe_sideband->SetStats(0);
+    h_subtracted->SetStats(0);
+    
     h_low_pe_signal->Draw("HIST");
     h_low_pe_sideband->Draw("HIST same");
     h_subtracted->Draw("HIST same");
-    TLegend *leg_sub = new TLegend(0.6, 0.7, 0.9, 0.9);
-    leg_sub->AddEntry(h_low_pe_signal, "Signal Region", "l");
-    leg_sub->AddEntry(h_low_pe_sideband, "Sideband", "l");
-    leg_sub->AddEntry(h_subtracted, "Signal - Sideband", "l");
+    
+    // Adjusted legend position with smaller font size
+    TLegend *leg_sub = new TLegend(0.5, 0.65, 0.9, 0.9);
+    leg_sub->SetTextSize(0.02); // Smaller font size for better fit
+    leg_sub->SetTextFont(42); // Standard ROOT font
+    leg_sub->SetBorderSize(1);
+    leg_sub->SetFillStyle(0); // Transparent background
+    leg_sub->AddEntry(h_low_pe_signal, "Neutron rich region (16 #mus - 300 #mus)", "l");
+    leg_sub->AddEntry(h_low_pe_sideband, "Neutron free region (flat background, 1000 #mus - 1200 #mus)", "l");
+    leg_sub->AddEntry(h_subtracted, "Neutron spectrum = Neutron rich region - Flat background", "l");
     leg_sub->Draw();
-    c->Update();
+    
+    c_sideband->Update();
     plotName = OUTPUT_DIR + "/Low_Energy_Sideband_Subtraction.png";
-    c->SaveAs(plotName.c_str());
+    c_sideband->SaveAs(plotName.c_str());
     cout << "Saved plot: " << plotName << endl;
     delete h_subtracted;
     delete leg_sub;
+    delete c_sideband;
 
     c->Clear();
     h_isolated_ge40->SetLineColor(kBlack);
