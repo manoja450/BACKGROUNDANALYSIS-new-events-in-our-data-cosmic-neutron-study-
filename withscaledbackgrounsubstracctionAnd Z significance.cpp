@@ -428,11 +428,11 @@ int main(int argc, char *argv[]) {
 
     // Neutron Purity Analysis histograms with larger axis titles
     TH1D* h_neutron_richness = new TH1D("neutron_richness", 
-        "Neutron-to-Background Ratio vs Time ;Time [#mus];Neutron/Bkg Ratio", 
-        50, 0, 500);
+        "Neutron-to-Background Ratio vs Time Cut;Time Cut [#mus];Neutron/Bkg Ratio", 
+        100, 0, 1000);
     TH1D* h_signal_significance = new TH1D("signal_significance", 
-        "Signal Significance vs Time ;Time[#mus];S/#sqrt{B}", 
-        50, 0, 500);
+        "Signal Significance vs Time ;Time Cut [#mus];S/#sqrt{S + B}", 
+        100, 0, 1000);
 
     // For Multi-dimensional analysis
     TH2D* h_energy_vs_time_low = new TH2D("energy_vs_time_low", 
@@ -835,36 +835,6 @@ int main(int argc, char *argv[]) {
     }
     cout << "------------------------\n";
 
-    // ==== NEUTRON PURITY ANALYSIS ====
-    cout << "=== Neutron Purity Analysis ===" << endl;
-
-    for (int time_cut = 20; time_cut <= 500; time_cut += 10) {
-    int signal_bin_start = h_dt_low_muon->FindBin(16.0);
-    int signal_bin_end = h_dt_low_muon->FindBin(time_cut);
-    int bkg_bin_start = h_dt_low_muon->FindBin(500.0);    // Background region
-    int bkg_bin_end = h_dt_low_muon->FindBin(1000.0);     
-        
-        double signal_events = h_dt_low_muon->Integral(signal_bin_start, signal_bin_end);
-        double bkg_events = h_dt_low_muon->Integral(bkg_bin_start, bkg_bin_end);
-        
-        // Scale background to signal region size
-        double bkg_scale = (time_cut - 16.0) / (1000.0 - 500.0);
-        double scaled_bkg = bkg_events * bkg_scale;
-        
-        if (scaled_bkg > 0 && signal_events > scaled_bkg) {
-            double neutron_ratio = (signal_events - scaled_bkg) / scaled_bkg;
-            double significance = (signal_events - scaled_bkg) / sqrt(signal_events);
-            
-            h_neutron_richness->Fill(time_cut, neutron_ratio);
-            h_signal_significance->Fill(time_cut, significance);
-        }
-        
-        if (time_cut % 100 == 0) {
-            cout << "Time cut " << time_cut << " µs: Signal=" << signal_events 
-                 << ", ScaledBkg=" << scaled_bkg << ", Ratio=" << (signal_events - scaled_bkg)/scaled_bkg << endl;
-        }
-    }
-
     TCanvas *c = new TCanvas("c", "Analysis Plots", 1200, 800);
     gStyle->SetOptStat(1111);
     gStyle->SetOptFit(1111);
@@ -1063,8 +1033,8 @@ int main(int argc, char *argv[]) {
         double ymin = pad->GetUymin();
         double ymax = pad->GetUymax();
 
-        double tau_min = *min_element(taus.begin(), taus.end());
-        double tau_max = *max_element(taus.begin(), taus.end());
+        double tau_min = *std::min_element(taus.begin(), taus.end());
+        double tau_max = *std::max_element(taus.begin(), taus.end());
         double scale = (ymax - ymin)/(tau_max - tau_min);
         double offset = ymin - tau_min * scale;
 
@@ -1257,14 +1227,14 @@ int main(int argc, char *argv[]) {
         double C_rate = C / bw;
         double t_min = 16.0;
 
-        // Create graph for Z(t)
-        TGraph *g_Z = new TGraph();
+        // Create histogram for Z(t) instead of graph
+        TH1D *h_Z = new TH1D("h_Z", "Signal Significance vs Time ;Time Cut [#mus];S/#sqrt{S + B}", 100, 0, 1000);
         double max_Z = 0;
         double opt_t = 0;
         double Z_200 = 0;
         double Z_300 = 0;
 
-        for (double t = 50.0; t <= 1000.0; t += 10.0) {
+        for (double t = 20.0; t <= 1000.0; t += 10.0) {
             double exp_min = TMath::Exp(-t_min / tau);
             double exp_t = TMath::Exp(-t / tau);
             double sig = N0_rate * tau * (exp_min - exp_t);
@@ -1272,8 +1242,7 @@ int main(int argc, char *argv[]) {
             double denom = sig + bkg;
             double Z = (denom > 0) ? sig / TMath::Sqrt(denom) : 0;
 
-            int point = g_Z->GetN();
-            g_Z->SetPoint(point, t, Z);
+            h_Z->Fill(t, Z);
 
             if (Z > max_Z) {
                 max_Z = Z;
@@ -1284,14 +1253,20 @@ int main(int argc, char *argv[]) {
             if (t == 300.0) Z_300 = Z;
         }
 
-        // Plot
+        // Plot h_Z with same style as h_signal_significance
         TCanvas *c_Z = new TCanvas("c_Z", "Signal Significance vs Time ", 1200, 800);
-        g_Z->SetTitle("Signal Significance vs Time ");
-        g_Z->GetXaxis()->SetTitle("Time(t) (#mus)");
-        g_Z->GetYaxis()->SetTitle("Z = S / #sqrt{S + B}");
-        g_Z->SetMarkerStyle(20);
-        g_Z->SetLineWidth(2);
-        g_Z->Draw("ALP");
+        c_Z->SetLeftMargin(0.10);
+        c_Z->SetBottomMargin(0.10);
+        h_Z->SetLineColor(kRed);
+        h_Z->SetLineWidth(3);
+        h_Z->SetStats(0);
+        h_Z->GetXaxis()->SetTitleSize(0.08);
+        h_Z->GetXaxis()->SetTitleOffset(0.6);
+        h_Z->GetYaxis()->SetTitleSize(0.08);
+        h_Z->GetYaxis()->SetTitleOffset(0.6);
+        h_Z->GetXaxis()->SetLabelSize(0.05);
+        h_Z->GetYaxis()->SetLabelSize(0.05);
+        h_Z->Draw("HIST");
         c_Z->Update();
         string plotName_Z = OUTPUT_DIR + "/Signal_Significance_vs_t.png";
         c_Z->SaveAs(plotName_Z.c_str());
@@ -1301,8 +1276,28 @@ int main(int argc, char *argv[]) {
         cout << "Signal Significance at 300 µs: " << Z_300 << endl;
         cout << "Optimal upper bound: " << opt_t << " µs with Z = " << max_Z << endl;
 
-        delete g_Z;
+        delete h_Z;
         delete c_Z;
+
+        // ==== NEUTRON PURITY ANALYSIS ====
+        cout << "=== Neutron Purity Analysis ===" << endl;
+
+        for (int time_cut = 20; time_cut <= 1000; time_cut += 10) {
+            double exp_t = TMath::Exp(-time_cut / tau);
+            double sig = N0_rate * exp_t;
+            double bkg = C_rate;
+            if (bkg > 0 && sig > 0) {
+                double neutron_ratio = sig / bkg;
+                double significance = sig / sqrt(sig + bkg);
+                h_neutron_richness->Fill(time_cut, neutron_ratio);
+                h_signal_significance->Fill(time_cut, significance);
+            }
+            
+            if (time_cut % 100 == 0) {
+                cout << "Time cut " << time_cut << " µs: Signal=" << sig 
+                     << ", Bkg=" << bkg << ", Ratio=" << sig/bkg << endl;
+            }
+        }
     } else {
         cout << "Warning: h_dt_low_muon has insufficient entries (" << h_dt_low_muon->GetEntries() 
              << "), skipping exponential fit" << endl;
