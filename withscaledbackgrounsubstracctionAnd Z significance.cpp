@@ -402,7 +402,7 @@ int main(int argc, char *argv[]) {
     TH1D* h_side_vp_muon = new TH1D("side_vp_muon", "Side Veto Energy for Muons;Energy (ADC);Counts", 200, 0, 5000);
     TH1D* h_top_vp_muon = new TH1D("top_vp_muon", "Top Veto Energy for Muons;Energy (ADC);Counts", 200, 0, 1000);
     TH1D* h_trigger_bits = new TH1D("trigger_bits", "Trigger Bits Distribution;Trigger Bits;Counts", 36, 0, 36);
-    TH1D* h_isolated_pe = new TH1D("isolated_pe", "Sum PEs Isolated Events;Photoelectrons;Events/10 p.e.", 200, 0, 2000);
+    TH1D* h_isolated_pe = new TH1D("isolated_pe", "Sum PEs Isolated Events;Photoelectrons;Events/20 p.e.", 200, 0, 1000);
     TH1D* h_low_iso = new TH1D("low_iso", "Sum PEs Low Energy Isolated Events;Photoelectrons;Events/1 p.e.", 100, 0, 100);
     TH1D* h_high_iso = new TH1D("high_iso", "Sum PEs High Energy Isolated Events;Photoelectrons;Events/10 p.e.", 100, 0, 1000);
     TH1D* h_dt_prompt_delayed = new TH1D("dt_prompt_delayed", "#Delta t High Energy (prompt) to Low Energy (delayed);#Delta t [#mus];Events", 200, 0, 10000);
@@ -410,7 +410,7 @@ int main(int argc, char *argv[]) {
     TH1D* h_dt_high_muon = new TH1D("dt_high_muon", "#Delta t High Energy Isolated to Muon Veto Tagged Events;#Delta t [#mus];Counts/10#mus", 120, 0, 1200);
     TH1D* h_low_pe_signal = new TH1D("low_pe_signal", "Low Energy Signal Region;Photoelectrons;Events", 100, 0, 100);
     TH1D* h_low_pe_sideband = new TH1D("low_pe_sideband", "Low Energy Sideband;Photoelectrons;Events", 100, 0, 100);
-    TH1D* h_isolated_ge40 = new TH1D("isolated_ge40", "Sum PEs Isolated Events (>=40 p.e.);Photoelectrons;Events/20 p.e.", 200, 40, 2000);
+    TH1D* h_isolated_ge40 = new TH1D("isolated_ge40", "Sum PEs Isolated Events (>=40 p.e.);Photoelectrons;Events/10 p.e.", 200, 0, 1000);
 
     // Histograms for veto panels (12-21)
     TH1D* h_veto_panel[10];
