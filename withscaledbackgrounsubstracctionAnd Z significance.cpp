@@ -406,8 +406,8 @@ int main(int argc, char *argv[]) {
     TH1D* h_low_iso = new TH1D("low_iso", "Sum PEs Low Energy Isolated Events;Photoelectrons;Events/1 p.e.", 100, 0, 100);
     TH1D* h_high_iso = new TH1D("high_iso", "Sum PEs High Energy Isolated Events;Photoelectrons;Events/10 p.e.", 100, 0, 1000);
     TH1D* h_dt_prompt_delayed = new TH1D("dt_prompt_delayed", "#Delta t High Energy (prompt) to Low Energy (delayed);#Delta t [#mus];Events", 200, 0, 10000);
-    TH1D* h_dt_low_muon = new TH1D("dt_low_muon", "#Delta t Low Energy Isolated to Muon Veto Tagged Events;#Delta t [#mus];Events/10 Counts", 120, 0, 1200);
-    TH1D* h_dt_high_muon = new TH1D("dt_high_muon", "#Delta t High Energy Isolated to Muon Veto Tagged Events;#Delta t [#mus];Events/10 Counts", 120, 0, 1200);
+    TH1D* h_dt_low_muon = new TH1D("dt_low_muon", "#Delta t Low Energy Isolated to Muon Veto Tagged Events;#Delta t [#mus];Counts/10#mus", 120, 0, 1200);
+    TH1D* h_dt_high_muon = new TH1D("dt_high_muon", "#Delta t High Energy Isolated to Muon Veto Tagged Events;#Delta t [#mus];Counts/10#mus", 120, 0, 1200);
     TH1D* h_low_pe_signal = new TH1D("low_pe_signal", "Low Energy Signal Region;Photoelectrons;Events", 100, 0, 100);
     TH1D* h_low_pe_sideband = new TH1D("low_pe_sideband", "Low Energy Sideband;Photoelectrons;Events", 100, 0, 100);
     TH1D* h_isolated_ge40 = new TH1D("isolated_ge40", "Sum PEs Isolated Events (>=40 p.e.);Photoelectrons;Events/20 p.e.", 200, 40, 2000);
@@ -428,10 +428,10 @@ int main(int argc, char *argv[]) {
 
     // Neutron Purity Analysis histograms with larger axis titles
     TH1D* h_neutron_richness = new TH1D("neutron_richness", 
-        "Neutron-to-Background Ratio vs Time Cut;Time Cut [#mus];Neutron/Bkg Ratio", 
+        "Neutron-to-Background Ratio vs Time;Time[#mus];Neutron/Bkg Ratio", 
         100, 0, 1000);
     TH1D* h_signal_significance = new TH1D("signal_significance", 
-        "Signal Significance vs Time ;Time Cut [#mus];S/#sqrt{S + B}", 
+        "Signal Significance vs Time;Time[#mus];S/#sqrt{S + B}", 
         100, 0, 1000);
 
     // For Multi-dimensional analysis
@@ -1151,8 +1151,6 @@ int main(int argc, char *argv[]) {
     h_dt_low_muon->SetLineColor(kBlue);
     h_dt_low_muon->SetFillColor(kBlue);
     h_dt_low_muon->SetFillStyle(3001);
-    h_dt_low_muon->GetXaxis()->SetTitle("#Delta t [#mus]");
-    h_dt_low_muon->GetYaxis()->SetTitle("Events");
     h_dt_low_muon->GetXaxis()->SetTitleSize(0.05);
     h_dt_low_muon->GetYaxis()->SetTitleSize(0.05);
     h_dt_low_muon->GetXaxis()->SetLabelSize(0.04);
@@ -1221,71 +1219,20 @@ int main(int argc, char *argv[]) {
         cout << Form("χ²/NDF = %.4f", chi2_ndf) << endl;
         cout << "----------------------------------------" << endl;
 
-        // Optimize signal significance
+        // ==== NEUTRON PURITY ANALYSIS ====
+        cout << "=== Neutron Purity Analysis ===" << endl;
+
         double bw = h_dt_low_muon->GetBinWidth(1);
         double N0_rate = N0 / bw;
         double C_rate = C / bw;
         double t_min = 16.0;
 
-        // Create histogram for Z(t) instead of graph
-        TH1D *h_Z = new TH1D("h_Z", "Signal Significance vs Time ;Time Cut [#mus];S/#sqrt{S + B}", 100, 0, 1000);
-        double max_Z = 0;
-        double opt_t = 0;
-        double Z_200 = 0;
-        double Z_300 = 0;
-
-        for (double t = 20.0; t <= 1000.0; t += 10.0) {
-            double exp_min = TMath::Exp(-t_min / tau);
-            double exp_t = TMath::Exp(-t / tau);
-            double sig = N0_rate * tau * (exp_min - exp_t);
-            double bkg = C_rate * (t - t_min);
-            double denom = sig + bkg;
-            double Z = (denom > 0) ? sig / TMath::Sqrt(denom) : 0;
-
-            h_Z->Fill(t, Z);
-
-            if (Z > max_Z) {
-                max_Z = Z;
-                opt_t = t;
-            }
-
-            if (t == 200.0) Z_200 = Z;
-            if (t == 300.0) Z_300 = Z;
-        }
-
-        // Plot h_Z with same style as h_signal_significance
-        TCanvas *c_Z = new TCanvas("c_Z", "Signal Significance vs Time ", 1200, 800);
-        c_Z->SetLeftMargin(0.10);
-        c_Z->SetBottomMargin(0.10);
-        h_Z->SetLineColor(kRed);
-        h_Z->SetLineWidth(3);
-        h_Z->SetStats(0);
-        h_Z->GetXaxis()->SetTitleSize(0.08);
-        h_Z->GetXaxis()->SetTitleOffset(0.6);
-        h_Z->GetYaxis()->SetTitleSize(0.08);
-        h_Z->GetYaxis()->SetTitleOffset(0.6);
-        h_Z->GetXaxis()->SetLabelSize(0.05);
-        h_Z->GetYaxis()->SetLabelSize(0.05);
-        h_Z->Draw("HIST");
-        c_Z->Update();
-        string plotName_Z = OUTPUT_DIR + "/Signal_Significance_vs_t.png";
-        c_Z->SaveAs(plotName_Z.c_str());
-        cout << "Saved plot: " << plotName_Z << endl;
-
-        cout << "Signal Significance at 200 µs: " << Z_200 << endl;
-        cout << "Signal Significance at 300 µs: " << Z_300 << endl;
-        cout << "Optimal upper bound: " << opt_t << " µs with Z = " << max_Z << endl;
-
-        delete h_Z;
-        delete c_Z;
-
-        // ==== NEUTRON PURITY ANALYSIS ====
-        cout << "=== Neutron Purity Analysis ===" << endl;
-
         for (int time_cut = 20; time_cut <= 1000; time_cut += 10) {
+            double exp_min = TMath::Exp(-t_min / tau);
             double exp_t = TMath::Exp(-time_cut / tau);
-            double sig = N0_rate * exp_t;
-            double bkg = C_rate;
+            double sig = N0_rate * tau * (exp_min - exp_t);
+            double bkg = C_rate * (time_cut - t_min);
+            
             if (bkg > 0 && sig > 0) {
                 double neutron_ratio = sig / bkg;
                 double significance = sig / sqrt(sig + bkg);
@@ -1295,7 +1242,8 @@ int main(int argc, char *argv[]) {
             
             if (time_cut % 100 == 0) {
                 cout << "Time cut " << time_cut << " µs: Signal=" << sig 
-                     << ", Bkg=" << bkg << ", Ratio=" << sig/bkg << endl;
+                     << ", Bkg=" << bkg << ", Ratio=" << sig/bkg 
+                     << ", Significance=" << sig/sqrt(sig + bkg) << endl;
             }
         }
     } else {
@@ -1320,8 +1268,6 @@ int main(int argc, char *argv[]) {
     h_dt_high_muon->SetLineColor(kBlue);
     h_dt_high_muon->SetFillColor(kBlue);
     h_dt_high_muon->SetFillStyle(3001);
-    h_dt_high_muon->GetXaxis()->SetTitle("#Delta t [#mus]");
-    h_dt_high_muon->GetYaxis()->SetTitle("Events");
     h_dt_high_muon->GetXaxis()->SetTitleSize(0.05);
     h_dt_high_muon->GetYaxis()->SetTitleSize(0.05);
     h_dt_high_muon->GetXaxis()->SetLabelSize(0.04);
@@ -1512,7 +1458,7 @@ int main(int argc, char *argv[]) {
     c->SaveAs(plotName.c_str());
     cout << "Saved plot: " << plotName << endl;
 
-    // Plot Neutron Purity Analysis with larger axis titles
+    // Plot Neutron Purity Analysis with larger axis titles - BOTH PLOTS RETAINED
     c->Clear();
     c->Divide(1,2);
     
