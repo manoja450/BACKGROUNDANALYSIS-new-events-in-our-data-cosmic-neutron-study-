@@ -402,14 +402,14 @@ int main(int argc, char *argv[]) {
     TH1D* h_side_vp_muon = new TH1D("side_vp_muon", "Side Veto Energy for Muons;Energy (ADC);Counts", 200, 0, 5000);
     TH1D* h_top_vp_muon = new TH1D("top_vp_muon", "Top Veto Energy for Muons;Energy (ADC);Counts", 200, 0, 1000);
     TH1D* h_trigger_bits = new TH1D("trigger_bits", "Trigger Bits Distribution;Trigger Bits;Counts", 36, 0, 36);
-    TH1D* h_isolated_pe = new TH1D("isolated_pe", "Sum PEs Isolated Events;Photoelectrons;Events/10 p.e.", 200, 0, 2000);
-    TH1D* h_low_iso = new TH1D("low_iso", "Sum PEs Low Energy Isolated Events;Photoelectrons;Events/1 p.e.", 100, 0, 100);
-    TH1D* h_high_iso = new TH1D("high_iso", "Sum PEs High Energy Isolated Events;Photoelectrons;Events/10 p.e.", 100, 0, 1000);
-    TH1D* h_dt_prompt_delayed = new TH1D("dt_prompt_delayed", "#Delta t High Energy (prompt) to Low Energy (delayed);#Delta t [#mus];Events", 200, 0, 10000);
+    TH1D* h_isolated_pe = new TH1D("isolated_pe", "Sum PEs Isolated Events;Photoelectrons;Counts/10 p.e.", 200, 0, 2000);
+    TH1D* h_low_iso = new TH1D("low_iso", "Sum PEs Low Energy Isolated Events;Photoelectrons;Counts/1 p.e.", 100, 0, 100);
+    TH1D* h_high_iso = new TH1D("high_iso", "Sum PEs High Energy Isolated Events;Photoelectrons;Counts/10 p.e.", 100, 0, 1000);
+    TH1D* h_dt_prompt_delayed = new TH1D("dt_prompt_delayed", "#Delta t High Energy (prompt) to Low Energy (delayed);#Delta t [#mus];Counts", 200, 0, 10000);
     TH1D* h_dt_low_muon = new TH1D("dt_low_muon", "#Delta t Low Energy Isolated to Muon Veto Tagged Events;#Delta t [#mus];Counts/10#mus", 120, 0, 1200);
     TH1D* h_dt_high_muon = new TH1D("dt_high_muon", "#Delta t High Energy Isolated to Muon Veto Tagged Events;#Delta t [#mus];Counts/10#mus", 120, 0, 1200);
-    TH1D* h_low_pe_signal = new TH1D("low_pe_signal", "Low Energy Signal Region;Photoelectrons;Events", 100, 0, 100);
-    TH1D* h_low_pe_sideband = new TH1D("low_pe_sideband", "Low Energy Sideband;Photoelectrons;Events", 100, 0, 100);
+    TH1D* h_low_pe_signal = new TH1D("low_pe_signal", "Low Energy Signal Region;Photoelectrons;Counts", 100, 0, 100);
+    TH1D* h_low_pe_sideband = new TH1D("low_pe_sideband", "Low Energy Sideband;Photoelectrons;Counts", 100, 0, 100);
     TH1D* h_isolated_ge40 = new TH1D("isolated_ge40", "Sum PEs Isolated Events (>=40 p.e.);Photoelectrons;Events/20 p.e.", 200, 40, 2000);
 
     // Histograms for veto panels (12-21)
@@ -1142,7 +1142,7 @@ int main(int argc, char *argv[]) {
     cout << "Saved plot: " << plotName << endl;
 
     TCanvas *c_low_muon = new TCanvas("c_low_muon", "DeltaT Low to Muon", 1200, 800);
-    c_low_muon->SetLeftMargin(0.12);
+    c_low_muon->SetLeftMargin(0.15);
     c_low_muon->SetRightMargin(0.08);
     c_low_muon->SetBottomMargin(0.12);
     c_low_muon->SetTopMargin(0.08);
@@ -1151,7 +1151,7 @@ int main(int argc, char *argv[]) {
     h_dt_low_muon->SetLineColor(kBlue);
     h_dt_low_muon->SetFillColor(kBlue);
     h_dt_low_muon->SetFillStyle(3001);
-    h_dt_low_muon->GetXaxis()->SetTitleSize(0.05);
+    h_dt_low_muon->GetXaxis()->SetTitleSize(0.04);
     h_dt_low_muon->GetYaxis()->SetTitleSize(0.05);
     h_dt_low_muon->GetXaxis()->SetLabelSize(0.04);
     h_dt_low_muon->GetYaxis()->SetLabelSize(0.04);
@@ -1223,11 +1223,11 @@ int main(int argc, char *argv[]) {
         cout << "=== Neutron Purity Analysis ===" << endl;
 
         double bw = h_dt_low_muon->GetBinWidth(1);
-        double N0_rate = N0 / bw;
-        double C_rate = C / bw;
+        double N0_rate = N0;
+        double C_rate = C;
         double t_min = 16.0;
 
-        for (int time_cut = 20; time_cut <= 1000; time_cut += 10) {
+        for (int time_cut = 16; time_cut <= 1000; time_cut += 10) {
             double sig = N0_rate * exp(-time_cut / tau);
             double bkg = C_rate;
             
@@ -1264,7 +1264,7 @@ int main(int argc, char *argv[]) {
 
     h_dt_high_muon->SetLineWidth(2);
     h_dt_high_muon->SetLineColor(kBlue);
-    h_dt_high_muon->SetFillColor(kBlue);
+    h_dt_high_muon->SetFillColor(kBlack);
     h_dt_high_muon->SetFillStyle(3001);
     h_dt_high_muon->GetXaxis()->SetTitleSize(0.05);
     h_dt_high_muon->GetYaxis()->SetTitleSize(0.05);
@@ -1346,7 +1346,6 @@ int main(int argc, char *argv[]) {
     if (expFit_high_muon) delete expFit_high_muon;
 
     // MODIFIED: Sideband subtraction plots - only scaled version
-    // Create larger canvas for the sideband subtraction plot with black line
     TCanvas *c_sideband = new TCanvas("c_sideband", "Low Energy Sideband Subtraction", 1200, 800);
     c_sideband->SetLeftMargin(0.1);
     c_sideband->SetRightMargin(0.1);
@@ -1371,7 +1370,6 @@ int main(int argc, char *argv[]) {
     h_low_pe_sideband->Draw("HIST same");
     h_subtracted->Draw("HIST same");
     
-    // Adjusted legend position with smaller font size
     TLegend *leg_sub = new TLegend(0.5, 0.65, 0.9, 0.9);
     leg_sub->SetTextSize(0.025);
     leg_sub->SetTextFont(42);
@@ -1379,7 +1377,6 @@ int main(int argc, char *argv[]) {
     leg_sub->SetFillStyle(0);
     leg_sub->AddEntry(h_low_pe_signal, "Neutron rich region (16-300)#mus", "l");
     leg_sub->AddEntry(h_low_pe_sideband, "Neutron free region (1000-1200)#mus", "l");
-    // CHANGED: Updated legend entry for black line
     leg_sub->AddEntry(h_subtracted, "Neutron spectrum = Neutron rich region - Neutron free region ", "l");
     leg_sub->Draw();
     
@@ -1464,6 +1461,7 @@ int main(int argc, char *argv[]) {
     c->cd(1);
     gPad->SetLeftMargin(0.10);
     gPad->SetBottomMargin(0.10);
+    h_neutron_richness->SetStats(0);
     h_neutron_richness->SetLineColor(kBlue);
     h_neutron_richness->SetLineWidth(3);
     h_neutron_richness->GetXaxis()->SetTitleSize(0.08);
