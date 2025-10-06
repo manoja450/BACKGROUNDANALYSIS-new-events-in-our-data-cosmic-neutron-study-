@@ -1345,106 +1345,114 @@ int main(int argc, char *argv[]) {
 
     if (expFit_high_muon) delete expFit_high_muon;
 
-    // MODIFIED: Sideband subtraction plots - only scaled version
-    TCanvas *c_sideband = new TCanvas("c_sideband", "Low Energy Sideband Subtraction", 1200, 800);
-    c_sideband->SetLeftMargin(0.1);
-    c_sideband->SetRightMargin(0.1);
-    c_sideband->SetBottomMargin(0.1);
-    c_sideband->SetTopMargin(0.1);
+    // Create sideband subtraction plot with scaled background (no subtracted spectrum)
+TCanvas *c_sideband = new TCanvas("c_sideband", "Low Energy Sideband Subtraction", 1200, 800);
+c_sideband->SetLeftMargin(0.1);
+c_sideband->SetRightMargin(0.1);
+c_sideband->SetBottomMargin(0.1);
+c_sideband->SetTopMargin(0.1);
 
-    TH1D* h_subtracted = (TH1D*)h_low_pe_signal->Clone("subtracted");
-    h_subtracted->Add(h_low_pe_sideband, -1);
-    h_low_pe_signal->SetLineColor(kRed);
-    h_low_pe_signal->SetLineWidth(3);
-    h_low_pe_sideband->SetLineColor(kBlue);
-    h_low_pe_sideband->SetLineWidth(3);
-    h_subtracted->SetLineColor(kBlack);
-    h_subtracted->SetLineWidth(3);
-    
-    // Turn off stats box for all histograms
-    h_low_pe_signal->SetStats(0);
-    h_low_pe_sideband->SetStats(0);
-    h_subtracted->SetStats(0);
-    
-    h_low_pe_signal->Draw("HIST");
-    h_low_pe_sideband->Draw("HIST same");
-    h_subtracted->Draw("HIST same");
-    
-    TLegend *leg_sub = new TLegend(0.5, 0.65, 0.9, 0.9);
-    leg_sub->SetTextSize(0.025);
-    leg_sub->SetTextFont(42);
-    leg_sub->SetBorderSize(1);
-    leg_sub->SetFillStyle(0);
-    leg_sub->AddEntry(h_low_pe_signal, "Neutron rich region (16-300)#mus", "l");
-    leg_sub->AddEntry(h_low_pe_sideband, "Neutron free region (1000-1200)#mus", "l");
-    leg_sub->AddEntry(h_subtracted, "Neutron spectrum = Neutron rich region - Neutron free region ", "l");
-    leg_sub->Draw();
-    
-    c_sideband->Update();
-    plotName = OUTPUT_DIR + "/Low_Energy_Sideband_Subtraction.png";
-    c_sideband->SaveAs(plotName.c_str());
-    cout << "Saved plot: " << plotName << endl;
-    delete h_subtracted;
-    delete leg_sub;
+// Create scaled background histogram
+TH1D* h_scaled_background1 = (TH1D*)h_low_pe_sideband->Clone("scaled_background1");
+double scale_factor1 = (300.0 - 16.0) / 200.0; // (300-16)/200 = 1.42
+h_scaled_background1->Scale(scale_factor1);
 
-    // Create scaled sideband subtraction plot (only scaled background)
-    TCanvas *c_sideband_scaled = new TCanvas("c_sideband_scaled", "Low Energy Sideband Subtraction (Scaled Background)", 1200, 800);
-    c_sideband_scaled->SetLeftMargin(0.1);
-    c_sideband_scaled->SetRightMargin(0.1);
-    c_sideband_scaled->SetBottomMargin(0.1);
-    c_sideband_scaled->SetTopMargin(0.1);
+// Set styles
+h_low_pe_signal->SetLineColor(kRed);
+h_low_pe_signal->SetLineWidth(3);
+h_low_pe_sideband->SetLineColor(kBlue);
+h_low_pe_sideband->SetLineWidth(3);
+h_scaled_background1->SetLineColor(kBlue);
+h_scaled_background1->SetLineWidth(3);
+h_scaled_background1->SetLineStyle(2); // Dashed line for scaled background
 
-    // Create scaled background histogram
-    TH1D* h_scaled_background = (TH1D*)h_low_pe_sideband->Clone("scaled_background");
-    double scale_factor = (300.0 - 16.0) / 200.0; // (300-16)/200 = 1.42
-    h_scaled_background->Scale(scale_factor);
-    
-    // Create subtracted histogram with scaled background
-    TH1D* h_subtracted_scaled = (TH1D*)h_low_pe_signal->Clone("subtracted_scaled");
-    h_subtracted_scaled->Add(h_scaled_background, -1);
-    
-    // Set styles - only show scaled background (no non-scaled background)
-    h_low_pe_signal->SetLineColor(kRed);
-    h_low_pe_signal->SetLineWidth(3);
-    h_scaled_background->SetLineColor(kBlue);
-    h_scaled_background->SetLineWidth(3);
-    h_scaled_background->SetLineStyle(2); // Dashed line for scaled background
-    h_subtracted_scaled->SetLineColor(kGreen);
-    h_subtracted_scaled->SetLineWidth(3);
-    
-    // Turn off stats box for all histograms
-    h_low_pe_signal->SetStats(0);
-    h_scaled_background->SetStats(0);
-    h_subtracted_scaled->SetStats(0);
-    
-    // Draw histograms - only scaled background (no non-scaled background)
-    h_low_pe_signal->Draw("HIST");
-    h_scaled_background->Draw("HIST same");
-    h_subtracted_scaled->Draw("HIST same");
-    
-    // Create legend for scaled plot
-    TLegend *leg_sub_scaled = new TLegend(0.5, 0.65, 0.9, 0.9);
-    leg_sub_scaled->SetTextSize(0.025);
-    leg_sub_scaled->SetTextFont(42);
-    leg_sub_scaled->SetBorderSize(1);
-    leg_sub_scaled->SetFillStyle(0);
-    leg_sub_scaled->AddEntry(h_low_pe_signal, "Neutron rich region (16-300)#mus", "l");
-    leg_sub_scaled->AddEntry(h_scaled_background, Form("Scaled neutron free region (scale factor = %.2f)", scale_factor), "l");
-    leg_sub_scaled->AddEntry(h_subtracted_scaled, "Neutron spectrum = Signal - Scaled background", "l");
-    leg_sub_scaled->Draw();
-    
-    c_sideband_scaled->Update();
-    plotName = OUTPUT_DIR + "/Low_Energy_Sideband_Subtraction_Scaled.png";
-    c_sideband_scaled->SaveAs(plotName.c_str());
-    cout << "Saved plot: " << plotName << endl;
-    
-    // Cleanup
-    delete h_subtracted_scaled;
-    delete h_scaled_background;
-    delete leg_sub_scaled;
-    delete c_sideband;
-    delete c_sideband_scaled;
+// Turn off stats box for all histograms
+h_low_pe_signal->SetStats(0);
+h_low_pe_sideband->SetStats(0);
+h_scaled_background1->SetStats(0);
 
+// Draw histograms
+h_low_pe_signal->Draw("HIST");
+h_low_pe_sideband->Draw("HIST same");
+h_scaled_background1->Draw("HIST same");
+
+// Create legend
+TLegend *leg_sub = new TLegend(0.5, 0.65, 0.9, 0.9);
+leg_sub->SetTextSize(0.025);
+leg_sub->SetTextFont(42);
+leg_sub->SetBorderSize(1);
+leg_sub->SetFillStyle(0);
+leg_sub->AddEntry(h_low_pe_signal, "Neutron rich region (16-300)#mus", "l");
+leg_sub->AddEntry(h_low_pe_sideband, "Neutron free region (1000-1200)#mus", "l");
+leg_sub->AddEntry(h_scaled_background1, Form("Scaled neutron free region (scale factor = %.2f)", scale_factor1), "l");
+leg_sub->Draw();
+
+c_sideband->Update();
+plotName = OUTPUT_DIR + "/Low_Energy_Sideband_Subtraction.png";  // Assignment only!
+c_sideband->SaveAs(plotName.c_str());
+cout << "Saved plot: " << plotName << endl;
+
+// Cleanup
+delete h_scaled_background1;
+delete leg_sub;
+delete c_sideband;
+
+// Create scaled sideband subtraction plot (unchanged, as requested)
+TCanvas *c_sideband_scaled = new TCanvas("c_sideband_scaled", "Low Energy Sideband Subtraction (Scaled Background)", 1200, 800);
+c_sideband_scaled->SetLeftMargin(0.1);
+c_sideband_scaled->SetRightMargin(0.1);
+c_sideband_scaled->SetBottomMargin(0.1);
+c_sideband_scaled->SetTopMargin(0.1);
+
+// Create scaled background histogram
+TH1D* h_scaled_background2 = (TH1D*)h_low_pe_sideband->Clone("scaled_background2");
+double scale_factor2 = (300.0 - 16.0) / 200.0; // (300-16)/200 = 1.42
+h_scaled_background2->Scale(scale_factor2);
+
+// Create subtracted histogram with scaled background
+TH1D* h_subtracted_scaled = (TH1D*)h_low_pe_signal->Clone("subtracted_scaled");
+h_subtracted_scaled->Add(h_scaled_background2, -1);
+
+// Set styles - only show scaled background (no non-scaled background)
+h_low_pe_signal->SetLineColor(kRed);
+h_low_pe_signal->SetLineWidth(3);
+h_scaled_background2->SetLineColor(kBlue);
+h_scaled_background2->SetLineWidth(3);
+h_scaled_background2->SetLineStyle(2); // Dashed line for scaled background
+h_subtracted_scaled->SetLineColor(kGreen);
+h_subtracted_scaled->SetLineWidth(3);
+
+// Turn off stats box for all histograms
+h_low_pe_signal->SetStats(0);
+h_scaled_background2->SetStats(0);
+h_subtracted_scaled->SetStats(0);
+
+// Draw histograms - only scaled background (no non-scaled background)
+h_low_pe_signal->Draw("HIST");
+h_scaled_background2->Draw("HIST same");
+h_subtracted_scaled->Draw("HIST same");
+
+// Create legend for scaled plot
+TLegend *leg_sub_scaled = new TLegend(0.5, 0.65, 0.9, 0.9);
+leg_sub_scaled->SetTextSize(0.025);
+leg_sub_scaled->SetTextFont(42);
+leg_sub_scaled->SetBorderSize(1);
+leg_sub_scaled->SetFillStyle(0);
+leg_sub_scaled->AddEntry(h_low_pe_signal, "Neutron rich region (16-300)#mus", "l");
+leg_sub_scaled->AddEntry(h_scaled_background2, Form("Scaled neutron free region (scale factor = %.2f)", scale_factor2), "l");
+leg_sub_scaled->AddEntry(h_subtracted_scaled, "Signal - Scaled background", "l");
+leg_sub_scaled->Draw();
+
+c_sideband_scaled->Update();
+plotName = OUTPUT_DIR + "/Low_Energy_Sideband_Subtraction_Scaled.png";
+c_sideband_scaled->SaveAs(plotName.c_str());
+cout << "Saved plot: " << plotName << endl;
+
+// Cleanup
+delete h_subtracted_scaled;
+delete h_scaled_background2;
+delete leg_sub_scaled;
+delete c_sideband_scaled;
     c->Clear();
     h_isolated_ge40->SetLineColor(kBlack);
     h_isolated_ge40->Draw();
