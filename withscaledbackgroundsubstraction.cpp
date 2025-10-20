@@ -394,23 +394,23 @@ int main(int argc, char *argv[]) {
     std::map<int, int> trigger_counts;
 
     // Define histograms
-    TH1D* h_muon_energy = new TH1D("muon_energy", "Muon Energy Distribution (with Michel Electrons);Energy (p.e.);Counts/100 p.e.", 550, -500, 3000);
-    TH1D* h_muon_all = new TH1D("muon_all", "All Muon Energy Distribution;Energy (p.e.);Counts/100 p.e.", 550, -500, 5000);
+    TH1D* h_muon_energy = new TH1D("muon_energy", "Muon Energy Distribution (with Michel Electrons);Energy (p.e.);Counts/7 p.e.", 500, -500, 3000);
+    TH1D* h_muon_all = new TH1D("muon_all", "All Muon Energy Distribution;Energy (p.e.);Counts/6 p.e.", 500, 0, 3000);
     TH1D* h_michel_energy = new TH1D("michel_energy", "Michel Electron Energy Distribution;Energy (p.e.);Counts/8 p.e.", 100, 0, 800);
     TH1D* h_dt_michel = new TH1D("DeltaT", "Muon-Michel Time Difference;Time to Previous event(Muon)(#mus);Counts/0.08 #mus", 200, 0, MICHEL_DT_MAX);
     TH2D* h_energy_vs_dt = new TH2D("energy_vs_dt", "Michel Energy vs Time Difference;dt (#mus);Energy (p.e.)", 160, 0, 16, 200, 0, 1000);
     TH1D* h_side_vp_muon = new TH1D("side_vp_muon", "Side Veto Energy for Muons;Energy (ADC);Counts", 200, 0, 5000);
     TH1D* h_top_vp_muon = new TH1D("top_vp_muon", "Top Veto Energy for Muons;Energy (ADC);Counts", 200, 0, 1000);
     TH1D* h_trigger_bits = new TH1D("trigger_bits", "Trigger Bits Distribution;Trigger Bits;Counts", 36, 0, 36);
-    TH1D* h_isolated_pe = new TH1D("isolated_pe", "Sum PEs Isolated Events;Photoelectrons;Events", 200, 0, 2000);
-    TH1D* h_low_iso = new TH1D("low_iso", "Sum PEs Low Energy Isolated Events;Photoelectrons;Events", 100, 0, 100);
-    TH1D* h_high_iso = new TH1D("high_iso", "Sum PEs High Energy Isolated Events;Photoelectrons;Events", 100, 0, 1000);
-    TH1D* h_dt_prompt_delayed = new TH1D("dt_prompt_delayed", "#Delta t High Energy (prompt) to Low Energy (delayed);#Delta t [#mus];Events", 200, 0, 10000);
-    TH1D* h_dt_low_muon = new TH1D("dt_low_muon", "#Delta t Low Energy Isolated to Muon Veto Tagged Events;#Delta t [#mus];Events", 120, 0, 1200);
-    TH1D* h_dt_high_muon = new TH1D("dt_high_muon", "#Delta t High Energy Isolated to Muon Veto Tagged Events;#Delta t [#mus];Events", 120, 0, 1200);
-    TH1D* h_low_pe_signal = new TH1D("low_pe_signal", "Low Energy Signal Region;Photoelectrons;Events", 100, 0, 100);
-    TH1D* h_low_pe_sideband = new TH1D("low_pe_sideband", "Low Energy Sideband;Photoelectrons;Events", 100, 0, 100);
-    TH1D* h_isolated_ge40 = new TH1D("isolated_ge40", "Sum PEs Isolated Events (>=40 p.e.);Photoelectrons;Events", 200, 40, 2000);
+    TH1D* h_isolated_pe = new TH1D("isolated_pe", "Sum PEs Isolated Events;Photoelectrons;Counts/10 p.e.", 200, 0, 2000);
+    TH1D* h_low_iso = new TH1D("low_iso", "Sum PEs Low Energy Isolated Events;Photoelectrons;Counts/1 p.e.", 100, 0, 100);
+    TH1D* h_high_iso = new TH1D("high_iso", "Sum PEs High Energy Isolated Events;Photoelectrons;Counts/10 p.e.", 100, 0, 1000);
+    TH1D* h_dt_prompt_delayed = new TH1D("dt_prompt_delayed", "#Delta t High Energy (prompt) to Low Energy (delayed);#Delta t [#mus];Counts", 200, 0, 10000);
+    TH1D* h_dt_low_muon = new TH1D("dt_low_muon", "#Delta t Low Energy Isolated to Muon Veto Tagged Events;#Delta t [#mus];Counts/10#mus", 120, 0, 1200);
+    TH1D* h_dt_high_muon = new TH1D("dt_high_muon", "#Delta t High Energy Isolated to Muon Veto Tagged Events;#Delta t [#mus];Counts/10#mus", 120, 0, 1200);
+    TH1D* h_low_pe_signal = new TH1D("low_pe_signal", "Low Energy Signal Region;Photoelectrons;Counts", 100, 0, 100);
+    TH1D* h_low_pe_sideband = new TH1D("low_pe_sideband", "Low Energy Sideband;Photoelectrons;Counts", 100, 0, 100);
+    TH1D* h_isolated_ge40 = new TH1D("isolated_ge40", "Sum PEs Isolated Events (>=40 p.e.);Photoelectrons;Events/20 p.e.", 200, 40, 2000);
 
     // Histograms for veto panels (12-21)
     TH1D* h_veto_panel[10];
@@ -428,11 +428,11 @@ int main(int argc, char *argv[]) {
 
     // Neutron Purity Analysis histograms with larger axis titles
     TH1D* h_neutron_richness = new TH1D("neutron_richness", 
-        "Neutron-to-Background Ratio vs Time Cut;Time Cut [#mus];Neutron/Bkg Ratio", 
-        50, 0, 500);
+        "Neutron-to-Background Ratio vs Time;Time[#mus];Neutron/Bkg Ratio", 
+        100, 0, 1000);
     TH1D* h_signal_significance = new TH1D("signal_significance", 
-        "Signal Significance vs Time Cut;Time Cut [#mus];S/#sqrt{B}", 
-        50, 0, 500);
+        "Signal Significance vs Time;Time[#mus];S/#sqrt{S + B}", 
+        100, 0, 1000);
 
     // For Multi-dimensional analysis
     TH2D* h_energy_vs_time_low = new TH2D("energy_vs_time_low", 
@@ -760,13 +760,7 @@ int main(int argc, char *argv[]) {
                 } else if (p.energy <= 100 && p.number >= 4) {
                     num_low_iso++;
                     double dt_high = p.start - last_high_time;
-                    cout << "Debug: Low-energy isolated event - EventID=" << eventID 
-                         << ", Energy=" << p.energy 
-                         << ", Multiplicity=" << p.number 
-                         << ", Time=" << p.start 
-                         << ", dt_high=" << dt_high 
-                         << ", dt_muon=" << dt_muon << endl;
-                    
+    
                     // Fill h_dt_prompt_delayed for all low-energy isolated events
                     if (dt_high >= 0 && dt_high <= 10000) {
                         h_dt_prompt_delayed->Fill(dt_high);
@@ -782,10 +776,10 @@ int main(int argc, char *argv[]) {
                     if (dt_muon >= LOW_ENERGY_DT_MIN) {
                         h_dt_low_muon->Fill(dt_muon);
                     }
-                    if (dt_muon > 16 && dt_muon < 300) {
+                    if (dt_muon > 16 && dt_muon < 100) {
                         h_low_pe_signal->Fill(p.energy);
                     }
-                    if (dt_muon > 1000 && dt_muon < 1285) {
+                    if (dt_muon > 1000 && dt_muon < 1200) {
                         h_low_pe_sideband->Fill(p.energy);
                     }
                 }
@@ -840,48 +834,6 @@ int main(int argc, char *argv[]) {
         cout << "Trigger " << pair.first << ": " << pair.second << " events\n";
     }
     cout << "------------------------\n";
-
-    // Debug: Print h_dt_low_muon bin contents
-    cout << "h_dt_low_muon entries: " << h_dt_low_muon->GetEntries() << endl;
-    cout << "Events in 16-100 µs: " << h_dt_low_muon->Integral(h_dt_low_muon->FindBin(16.0), h_dt_low_muon->FindBin(100.0)) << endl;
-    cout << "Events in 100-500 µs: " << h_dt_low_muon->Integral(h_dt_low_muon->FindBin(100.0), h_dt_low_muon->FindBin(500.0)) << endl;
-    cout << "Events in 500-1200 µs: " << h_dt_low_muon->Integral(h_dt_low_muon->FindBin(500.0), h_dt_low_muon->FindBin(1200.0)) << endl;
-
-    // Debug: Print h_dt_high_muon bin contents
-    cout << "h_dt_high_muon entries: " << h_dt_high_muon->GetEntries() << endl;
-    cout << "Events in 16-100 µs: " << h_dt_high_muon->Integral(h_dt_high_muon->FindBin(16.0), h_dt_high_muon->FindBin(100.0)) << endl;
-    cout << "Events in 100-500 µs: " << h_dt_high_muon->Integral(h_dt_high_muon->FindBin(100.0), h_dt_high_muon->FindBin(500.0)) << endl;
-    cout << "Events in 500-1200 µs: " << h_dt_high_muon->Integral(h_dt_high_muon->FindBin(500.0), h_dt_high_muon->FindBin(1200.0)) << endl;
-
-    // ==== NEUTRON PURITY ANALYSIS ====
-    cout << "=== Neutron Purity Analysis ===" << endl;
-
-    for (int time_cut = 20; time_cut <= 500; time_cut += 10) {
-    int signal_bin_start = h_dt_low_muon->FindBin(16.0);
-    int signal_bin_end = h_dt_low_muon->FindBin(time_cut);
-    int bkg_bin_start = h_dt_low_muon->FindBin(500.0);    // Background region
-    int bkg_bin_end = h_dt_low_muon->FindBin(1000.0);     
-        
-        double signal_events = h_dt_low_muon->Integral(signal_bin_start, signal_bin_end);
-        double bkg_events = h_dt_low_muon->Integral(bkg_bin_start, bkg_bin_end);
-        
-        // Scale background to signal region size
-        double bkg_scale = (time_cut - 16.0) / (1000.0 - 500.0);
-        double scaled_bkg = bkg_events * bkg_scale;
-        
-        if (scaled_bkg > 0 && signal_events > scaled_bkg) {
-            double neutron_ratio = (signal_events - scaled_bkg) / scaled_bkg;
-            double significance = (signal_events - scaled_bkg) / sqrt(signal_events);
-            
-            h_neutron_richness->Fill(time_cut, neutron_ratio);
-            h_signal_significance->Fill(time_cut, significance);
-        }
-        
-        if (time_cut % 100 == 0) {
-            cout << "Time cut " << time_cut << " µs: Signal=" << signal_events 
-                 << ", ScaledBkg=" << scaled_bkg << ", Ratio=" << (signal_events - scaled_bkg)/scaled_bkg << endl;
-        }
-    }
 
     TCanvas *c = new TCanvas("c", "Analysis Plots", 1200, 800);
     gStyle->SetOptStat(1111);
@@ -1081,8 +1033,8 @@ int main(int argc, char *argv[]) {
         double ymin = pad->GetUymin();
         double ymax = pad->GetUymax();
 
-        double tau_min = *min_element(taus.begin(), taus.end());
-        double tau_max = *max_element(taus.begin(), taus.end());
+        double tau_min = *std::min_element(taus.begin(), taus.end());
+        double tau_max = *std::max_element(taus.begin(), taus.end());
         double scale = (ymax - ymin)/(tau_max - tau_min);
         double offset = ymin - tau_min * scale;
 
@@ -1190,7 +1142,7 @@ int main(int argc, char *argv[]) {
     cout << "Saved plot: " << plotName << endl;
 
     TCanvas *c_low_muon = new TCanvas("c_low_muon", "DeltaT Low to Muon", 1200, 800);
-    c_low_muon->SetLeftMargin(0.12);
+    c_low_muon->SetLeftMargin(0.15);
     c_low_muon->SetRightMargin(0.08);
     c_low_muon->SetBottomMargin(0.12);
     c_low_muon->SetTopMargin(0.08);
@@ -1199,9 +1151,7 @@ int main(int argc, char *argv[]) {
     h_dt_low_muon->SetLineColor(kBlue);
     h_dt_low_muon->SetFillColor(kBlue);
     h_dt_low_muon->SetFillStyle(3001);
-    h_dt_low_muon->GetXaxis()->SetTitle("#Delta t [#mus]");
-    h_dt_low_muon->GetYaxis()->SetTitle("Events");
-    h_dt_low_muon->GetXaxis()->SetTitleSize(0.05);
+    h_dt_low_muon->GetXaxis()->SetTitleSize(0.04);
     h_dt_low_muon->GetYaxis()->SetTitleSize(0.05);
     h_dt_low_muon->GetXaxis()->SetLabelSize(0.04);
     h_dt_low_muon->GetYaxis()->SetLabelSize(0.04);
@@ -1268,6 +1218,32 @@ int main(int argc, char *argv[]) {
         cout << Form("C = %.1f ± %.1f", C, C_err) << endl;
         cout << Form("χ²/NDF = %.4f", chi2_ndf) << endl;
         cout << "----------------------------------------" << endl;
+
+        // ==== NEUTRON PURITY ANALYSIS ====
+        cout << "=== Neutron Purity Analysis ===" << endl;
+
+        double bw = h_dt_low_muon->GetBinWidth(1);
+        double N0_rate = N0;
+        double C_rate = C;
+        double t_min = 16.0;
+
+        for (int time_cut = 16; time_cut <= 1000; time_cut += 10) {
+            double sig = N0_rate * exp(-time_cut / tau);
+            double bkg = C_rate;
+            
+            if (bkg > 0 && sig > 0) {
+                double neutron_ratio = sig / bkg;
+                double significance = sig / sqrt(sig + bkg);
+                h_neutron_richness->Fill(time_cut, neutron_ratio);
+                h_signal_significance->Fill(time_cut, significance);
+            }
+            
+            if (time_cut % 100 == 0) {
+                cout << "Time cut " << time_cut << " µs: Signal=" << sig 
+                     << ", Bkg=" << bkg << ", Ratio=" << sig/bkg 
+                     << ", Significance=" << sig/sqrt(sig + bkg) << endl;
+            }
+        }
     } else {
         cout << "Warning: h_dt_low_muon has insufficient entries (" << h_dt_low_muon->GetEntries() 
              << "), skipping exponential fit" << endl;
@@ -1288,10 +1264,8 @@ int main(int argc, char *argv[]) {
 
     h_dt_high_muon->SetLineWidth(2);
     h_dt_high_muon->SetLineColor(kBlue);
-    h_dt_high_muon->SetFillColor(kBlue);
+    h_dt_high_muon->SetFillColor(kBlack);
     h_dt_high_muon->SetFillStyle(3001);
-    h_dt_high_muon->GetXaxis()->SetTitle("#Delta t [#mus]");
-    h_dt_high_muon->GetYaxis()->SetTitle("Events");
     h_dt_high_muon->GetXaxis()->SetTitleSize(0.05);
     h_dt_high_muon->GetYaxis()->SetTitleSize(0.05);
     h_dt_high_muon->GetXaxis()->SetLabelSize(0.04);
@@ -1371,110 +1345,114 @@ int main(int argc, char *argv[]) {
 
     if (expFit_high_muon) delete expFit_high_muon;
 
-    // MODIFIED: Sideband subtraction plots - only scaled version
-    // Create larger canvas for the sideband subtraction plot with black line
-    TCanvas *c_sideband = new TCanvas("c_sideband", "Low Energy Sideband Subtraction", 1200, 800);
-    c_sideband->SetLeftMargin(0.1);
-    c_sideband->SetRightMargin(0.1);
-    c_sideband->SetBottomMargin(0.1);
-    c_sideband->SetTopMargin(0.1);
+    // Create sideband subtraction plot with scaled background (no subtracted spectrum)
+TCanvas *c_sideband = new TCanvas("c_sideband", "Low Energy Sideband Subtraction", 1200, 800);
+c_sideband->SetLeftMargin(0.1);
+c_sideband->SetRightMargin(0.1);
+c_sideband->SetBottomMargin(0.1);
+c_sideband->SetTopMargin(0.1);
 
-    TH1D* h_subtracted = (TH1D*)h_low_pe_signal->Clone("subtracted");
-    h_subtracted->Add(h_low_pe_sideband, -1);
-    h_low_pe_signal->SetLineColor(kRed);
-    h_low_pe_signal->SetLineWidth(3);
-    h_low_pe_sideband->SetLineColor(kBlue);
-    h_low_pe_sideband->SetLineWidth(3);
-    // CHANGED: Green line to black line
-    h_subtracted->SetLineColor(kBlack);
-    h_subtracted->SetLineWidth(3);
-    
-    // Turn off stats box for all histograms
-    h_low_pe_signal->SetStats(0);
-    h_low_pe_sideband->SetStats(0);
-    h_subtracted->SetStats(0);
-    
-    h_low_pe_signal->Draw("HIST");
-    h_low_pe_sideband->Draw("HIST same");
-    h_subtracted->Draw("HIST same");
-    
-    // Adjusted legend position with smaller font size
-    TLegend *leg_sub = new TLegend(0.5, 0.65, 0.9, 0.9);
-    leg_sub->SetTextSize(0.02);
-    leg_sub->SetTextFont(42);
-    leg_sub->SetBorderSize(1);
-    leg_sub->SetFillStyle(0);
-    leg_sub->AddEntry(h_low_pe_signal, "Neutron rich region (16 #mus - 300 #mus)", "l");
-    leg_sub->AddEntry(h_low_pe_sideband, "Neutron free region (flat background, 1000 #mus - 1200 #mus)", "l");
-    // CHANGED: Updated legend entry for black line
-    leg_sub->AddEntry(h_subtracted, "Neutron spectrum = Neutron rich region - Flat background", "l");
-    leg_sub->Draw();
-    
-    c_sideband->Update();
-    plotName = OUTPUT_DIR + "/Low_Energy_Sideband_Subtraction.png";
-    c_sideband->SaveAs(plotName.c_str());
-    cout << "Saved plot: " << plotName << endl;
-    delete h_subtracted;
-    delete leg_sub;
+// Create scaled background histogram
+TH1D* h_scaled_background1 = (TH1D*)h_low_pe_sideband->Clone("scaled_background1");
+double scale_factor1 = (100.0 - 16.0) / 200.0; // (100-16)/200 = 0.42
+h_scaled_background1->Scale(scale_factor1);
 
-    // Create scaled sideband subtraction plot (only scaled background)
-    TCanvas *c_sideband_scaled = new TCanvas("c_sideband_scaled", "Low Energy Sideband Subtraction (Scaled Background)", 1200, 800);
-    c_sideband_scaled->SetLeftMargin(0.1);
-    c_sideband_scaled->SetRightMargin(0.1);
-    c_sideband_scaled->SetBottomMargin(0.1);
-    c_sideband_scaled->SetTopMargin(0.1);
+// Set styles
+h_low_pe_signal->SetLineColor(kRed);
+h_low_pe_signal->SetLineWidth(3);
+h_low_pe_sideband->SetLineColor(kBlue);
+h_low_pe_sideband->SetLineWidth(3);
+h_scaled_background1->SetLineColor(kBlue);
+h_scaled_background1->SetLineWidth(3);
+h_scaled_background1->SetLineStyle(2); // Dashed line for scaled background
 
-    // Create scaled background histogram
-    TH1D* h_scaled_background = (TH1D*)h_low_pe_sideband->Clone("scaled_background");
-    double scale_factor = (300.0 - 16.0) / 200.0; // (300-16)/200 = 1.42
-    h_scaled_background->Scale(scale_factor);
-    
-    // Create subtracted histogram with scaled background
-    TH1D* h_subtracted_scaled = (TH1D*)h_low_pe_signal->Clone("subtracted_scaled");
-    h_subtracted_scaled->Add(h_scaled_background, -1);
-    
-    // Set styles - only show scaled background (no non-scaled background)
-    h_low_pe_signal->SetLineColor(kRed);
-    h_low_pe_signal->SetLineWidth(3);
-    h_scaled_background->SetLineColor(kBlue);
-    h_scaled_background->SetLineWidth(3);
-    h_scaled_background->SetLineStyle(2); // Dashed line for scaled background
-    h_subtracted_scaled->SetLineColor(kGreen);
-    h_subtracted_scaled->SetLineWidth(3);
-    
-    // Turn off stats box for all histograms
-    h_low_pe_signal->SetStats(0);
-    h_scaled_background->SetStats(0);
-    h_subtracted_scaled->SetStats(0);
-    
-    // Draw histograms - only scaled background (no non-scaled background)
-    h_low_pe_signal->Draw("HIST");
-    h_scaled_background->Draw("HIST same");
-    h_subtracted_scaled->Draw("HIST same");
-    
-    // Create legend for scaled plot
-    TLegend *leg_sub_scaled = new TLegend(0.5, 0.65, 0.9, 0.9);
-    leg_sub_scaled->SetTextSize(0.02);
-    leg_sub_scaled->SetTextFont(42);
-    leg_sub_scaled->SetBorderSize(1);
-    leg_sub_scaled->SetFillStyle(0);
-    leg_sub_scaled->AddEntry(h_low_pe_signal, "Neutron rich region (16 #mus - 300 #mus)", "l");
-    leg_sub_scaled->AddEntry(h_scaled_background, Form("Scaled neutron free region (scale factor = %.2f)", scale_factor), "l");
-    leg_sub_scaled->AddEntry(h_subtracted_scaled, "Neutron spectrum = Signal - Scaled background", "l");
-    leg_sub_scaled->Draw();
-    
-    c_sideband_scaled->Update();
-    plotName = OUTPUT_DIR + "/Low_Energy_Sideband_Subtraction_Scaled.png";
-    c_sideband_scaled->SaveAs(plotName.c_str());
-    cout << "Saved plot: " << plotName << endl;
-    
-    // Cleanup
-    delete h_subtracted_scaled;
-    delete h_scaled_background;
-    delete leg_sub_scaled;
-    delete c_sideband;
-    delete c_sideband_scaled;
+// Turn off stats box for all histograms
+h_low_pe_signal->SetStats(0);
+h_low_pe_sideband->SetStats(0);
+h_scaled_background1->SetStats(0);
 
+// Draw histograms
+h_low_pe_signal->Draw("HIST");
+h_low_pe_sideband->Draw("HIST same");
+h_scaled_background1->Draw("HIST same");
+
+// Create legend
+TLegend *leg_sub = new TLegend(0.5, 0.65, 0.9, 0.9);
+leg_sub->SetTextSize(0.025);
+leg_sub->SetTextFont(42);
+leg_sub->SetBorderSize(1);
+leg_sub->SetFillStyle(0);
+leg_sub->AddEntry(h_low_pe_signal, "Neutron rich region (16-100)#mus", "l");
+leg_sub->AddEntry(h_low_pe_sideband, "Neutron free region (1000-1200)#mus", "l");
+leg_sub->AddEntry(h_scaled_background1, Form("Scaled neutron free region (scale factor = %.2f)", scale_factor1), "l");
+leg_sub->Draw();
+
+c_sideband->Update();
+plotName = OUTPUT_DIR + "/Low_Energy_Sideband_Subtraction.png";  // Assignment only!
+c_sideband->SaveAs(plotName.c_str());
+cout << "Saved plot: " << plotName << endl;
+
+// Cleanup
+delete h_scaled_background1;
+delete leg_sub;
+delete c_sideband;
+
+// Create scaled sideband subtraction plot (unchanged, as requested)
+TCanvas *c_sideband_scaled = new TCanvas("c_sideband_scaled", "Low Energy Sideband Subtraction (Scaled Background)", 1200, 800);
+c_sideband_scaled->SetLeftMargin(0.1);
+c_sideband_scaled->SetRightMargin(0.1);
+c_sideband_scaled->SetBottomMargin(0.1);
+c_sideband_scaled->SetTopMargin(0.1);
+
+// Create scaled background histogram
+TH1D* h_scaled_background2 = (TH1D*)h_low_pe_sideband->Clone("scaled_background2");
+double scale_factor2 = (100.0 - 16.0) / 200.0; // (100-16)/200 = 0.42
+h_scaled_background2->Scale(scale_factor2);
+
+// Create subtracted histogram with scaled background
+TH1D* h_subtracted_scaled = (TH1D*)h_low_pe_signal->Clone("subtracted_scaled");
+h_subtracted_scaled->Add(h_scaled_background2, -1);
+
+// Set styles - only show scaled background (no non-scaled background)
+h_low_pe_signal->SetLineColor(kRed);
+h_low_pe_signal->SetLineWidth(3);
+h_scaled_background2->SetLineColor(kBlue);
+h_scaled_background2->SetLineWidth(3);
+h_scaled_background2->SetLineStyle(2); // Dashed line for scaled background
+h_subtracted_scaled->SetLineColor(kGreen);
+h_subtracted_scaled->SetLineWidth(3);
+
+// Turn off stats box for all histograms
+h_low_pe_signal->SetStats(0);
+h_scaled_background2->SetStats(0);
+h_subtracted_scaled->SetStats(0);
+
+// Draw histograms - only scaled background (no non-scaled background)
+h_low_pe_signal->Draw("HIST");
+h_scaled_background2->Draw("HIST same");
+h_subtracted_scaled->Draw("HIST same");
+
+// Create legend for scaled plot
+TLegend *leg_sub_scaled = new TLegend(0.5, 0.65, 0.9, 0.9);
+leg_sub_scaled->SetTextSize(0.025);
+leg_sub_scaled->SetTextFont(42);
+leg_sub_scaled->SetBorderSize(1);
+leg_sub_scaled->SetFillStyle(0);
+leg_sub_scaled->AddEntry(h_low_pe_signal, "Neutron rich region (16-100)#mus", "l");
+leg_sub_scaled->AddEntry(h_scaled_background2, Form("Scaled neutron free region (scale factor = %.2f)", scale_factor2), "l");
+leg_sub_scaled->AddEntry(h_subtracted_scaled, "Signal - Scaled background", "l");
+leg_sub_scaled->Draw();
+
+c_sideband_scaled->Update();
+plotName = OUTPUT_DIR + "/Low_Energy_Sideband_Subtraction_Scaled.png";
+c_sideband_scaled->SaveAs(plotName.c_str());
+cout << "Saved plot: " << plotName << endl;
+
+// Cleanup
+delete h_subtracted_scaled;
+delete h_scaled_background2;
+delete leg_sub_scaled;
+delete c_sideband_scaled;
     c->Clear();
     h_isolated_ge40->SetLineColor(kBlack);
     h_isolated_ge40->Draw();
@@ -1483,34 +1461,36 @@ int main(int argc, char *argv[]) {
     c->SaveAs(plotName.c_str());
     cout << "Saved plot: " << plotName << endl;
 
-    // Plot Neutron Purity Analysis with larger axis titles
+    // Plot Neutron Purity Analysis with larger axis titles - BOTH PLOTS RETAINED
     c->Clear();
     c->Divide(1,2);
     
     // First plot: Neutron Richness
     c->cd(1);
-    gPad->SetLeftMargin(0.15);
-    gPad->SetBottomMargin(0.15);
+    gPad->SetLeftMargin(0.10);
+    gPad->SetBottomMargin(0.10);
+    h_neutron_richness->SetStats(0);
     h_neutron_richness->SetLineColor(kBlue);
     h_neutron_richness->SetLineWidth(3);
-    h_neutron_richness->GetXaxis()->SetTitleSize(0.06);
-    h_neutron_richness->GetXaxis()->SetTitleOffset(0.9);
-    h_neutron_richness->GetYaxis()->SetTitleSize(0.06);
-    h_neutron_richness->GetYaxis()->SetTitleOffset(1.2);
+    h_neutron_richness->GetXaxis()->SetTitleSize(0.08);
+    h_neutron_richness->GetXaxis()->SetTitleOffset(0.6);
+    h_neutron_richness->GetYaxis()->SetTitleSize(0.08);
+    h_neutron_richness->GetYaxis()->SetTitleOffset(0.6);
     h_neutron_richness->GetXaxis()->SetLabelSize(0.05);
     h_neutron_richness->GetYaxis()->SetLabelSize(0.05);
     h_neutron_richness->Draw("HIST");
     
     // Second plot: Signal Significance
     c->cd(2);
-    gPad->SetLeftMargin(0.15);
-    gPad->SetBottomMargin(0.15);
+    gPad->SetLeftMargin(0.10);
+    gPad->SetBottomMargin(0.10);
+    h_signal_significance->SetStats(0);
     h_signal_significance->SetLineColor(kRed);
     h_signal_significance->SetLineWidth(3);
-    h_signal_significance->GetXaxis()->SetTitleSize(0.06);
-    h_signal_significance->GetXaxis()->SetTitleOffset(0.9);
-    h_signal_significance->GetYaxis()->SetTitleSize(0.06);
-    h_signal_significance->GetYaxis()->SetTitleOffset(1.2);
+    h_signal_significance->GetXaxis()->SetTitleSize(0.08);
+    h_signal_significance->GetXaxis()->SetTitleOffset(0.6);
+    h_signal_significance->GetYaxis()->SetTitleSize(0.08);
+    h_signal_significance->GetYaxis()->SetTitleOffset(0.6);
     h_signal_significance->GetXaxis()->SetLabelSize(0.05);
     h_signal_significance->GetYaxis()->SetLabelSize(0.05);
     h_signal_significance->Draw("HIST");
