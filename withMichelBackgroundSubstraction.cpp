@@ -1436,7 +1436,7 @@ int main(int argc, char *argv[]) {
             // Predict Michel events in signal region (16-100 μs)
             if (tau_fit > 0) {
                 predicted_michels = N0_fit * (exp(-SIGNAL_REGION_MIN/tau_fit) - exp(-SIGNAL_REGION_MAX/tau_fit));
-                predicted_michels += C_fit * (SIGNAL_REGION_MAX - SIGNAL_REGION_MIN); // Constant background
+                //predicted_michels += C_fit * (SIGNAL_REGION_MAX - SIGNAL_REGION_MIN); // Constant background
             }
             
             cout << Form("Predicted Michel events in 16-100 μs: %.1f", predicted_michels) << endl;
