@@ -57,7 +57,7 @@ const double TOP_VP_THRESHOLD = 450; // Original threshold
 const double FIT_MIN = 1.0; // Fit range min for Michel dt (µs)
 const double FIT_MAX = 16.0; // Fit range max for Michel dt (µs)
 const double FIT_MIN_LOW_MUON = 16.0; // Fit range min for low to muon dt (µs)
-const double FIT_MAX_LOW_MUON = 1200.0; // Fit range max for low to muon dt (µs, narrowed)
+const double FIT_MAX_LOW_MUON = 1200.0; // Fit range max for low to muon dt (µs)
 
 // Michel background prediction constants
 const double SIGNAL_REGION_MIN = 16.0;    // Signal region start (µs)
@@ -408,6 +408,10 @@ int main(int argc, char *argv[]) {
     int num_cosmic_events = 0;
     int num_low_iso = 0;
 
+    // Counters for 90 p.e. events
+    int count_90pe_original = 0;
+    int count_90pe_extended = 0;
+
     std::map<int, int> trigger_counts;
 
     // Define histograms
@@ -431,10 +435,10 @@ int main(int argc, char *argv[]) {
 
     // Extended Michel analysis histograms for background subtraction
     TH1D* h_dt_michel_sideband = new TH1D("dt_michel_sideband", 
-        "Michel Time Distribution (0-16 #mus);Time to Previous Muon (#mus);Counts", 
+        "Michel Time Distribution (0-16 #mus);Time to Previous Muon (#mus);Counts/0.2#mus", 
         80, 0, 16);
     TH1D* h_michel_energy_sideband = new TH1D("michel_energy_sideband", 
-        "Michel Energy Spectrum;Energy (p.e.);Counts", 
+        "Michel Energy Spectrum;Energy (p.e.);Counts/1p.e.", 
         100, 0, 100);
 
     // Histograms for veto panels (12-21)
@@ -451,7 +455,7 @@ int main(int argc, char *argv[]) {
                                    200, 0, 8000);
     }
 
-    // Neutron Purity Analysis histograms with larger axis titles
+    // Neutron Purity Analysis histograms
     TH1D* h_neutron_richness = new TH1D("neutron_richness", 
         "Neutron-to-Background Ratio vs Time;Time[#mus];Neutron/Bkg Ratio", 
         100, 0, 1000);
@@ -459,7 +463,7 @@ int main(int argc, char *argv[]) {
         "Signal Significance vs Time;Time[#mus];S/#sqrt{S + B}", 
         100, 0, 1000);
 
-    // For Multi-dimensional analysis
+    // Multi-dimensional analysis
     TH2D* h_energy_vs_time_low = new TH2D("energy_vs_time_low", 
         "Low Energy Events: Energy vs Time to Muon;Time to Muon [#mus];Energy (p.e.)", 
         120, 0, 1200, 100, 0, 100);
@@ -475,7 +479,7 @@ int main(int argc, char *argv[]) {
     std::vector<std::pair<double, double>> muon_candidates;
     std::set<double> michel_muon_times;
 
-    // Global cosmic counts across all files (keyed by hour start timestamp)
+    // Global cosmic counts across all files
     std::map<Long64_t, int> cosmic_counts;
 
     // Vector to store per-file cosmic info for daily calculation
@@ -734,7 +738,7 @@ int main(int argc, char *argv[]) {
 
             double dt = p.start - last_muon_time;
 
-            // ORIGINAL MICHEL ANALYSIS (0-16 μs) - UNCHANGED
+            // ORIGINAL MICHEL ANALYSIS (0-16 μs)
             bool is_michel_candidate = is_beam_off &&
                                       p.energy >= MICHEL_ENERGY_MIN &&
                                       p.energy <= MICHEL_ENERGY_MAX &&
@@ -751,6 +755,11 @@ int main(int argc, char *argv[]) {
                 num_michels++;
                 michel_muon_times.insert(last_muon_time);
                 h_michel_energy->Fill(p.energy);
+                
+                // Count events around 90 p.e. for original analysis
+                if (p.energy >= 85 && p.energy <= 95) {
+                    count_90pe_original++;
+                }
             }
 
             if (is_michel_for_dt) {
@@ -770,6 +779,11 @@ int main(int argc, char *argv[]) {
                 num_michels_extended++;
                 h_dt_michel_sideband->Fill(dt);
                 h_michel_energy_sideband->Fill(p.energy);
+                
+                // Count events around 90 p.e. for extended analysis
+                if (p.energy >= 85 && p.energy <= 95) {
+                    count_90pe_extended++;
+                }
             }
 
             p.last_muon_time = last_muon_time;
@@ -818,7 +832,7 @@ int main(int argc, char *argv[]) {
                     if (dt_muon >= LOW_ENERGY_DT_MIN) {
                         h_dt_low_muon->Fill(dt_muon);
                     }
-                    // CORRECTED: Neutron-rich region is now 16-100 μs
+                    // Neutron-rich region is 16-100 μs
                     if (dt_muon > 16 && dt_muon < 100) {
                         h_low_pe_signal->Fill(p.energy);
                     }
@@ -838,6 +852,18 @@ int main(int argc, char *argv[]) {
         f->Close();
         delete f;
     }
+
+    // Print the 90 p.e. counts comparison
+    cout << "=== 90 p.e. EVENT COUNT COMPARISON ===" << endl;
+    cout << "Original Michel analysis (0-16 μs, 0-1000 p.e.): " << count_90pe_original << " events in 85-95 p.e. range" << endl;
+    cout << "Extended Michel analysis (0-16 μs, 0-100 p.e.): " << count_90pe_extended << " events in 85-95 p.e. range" << endl;
+    cout << "Difference: " << count_90pe_original - count_90pe_extended << " events" << endl;
+    if (count_90pe_original == count_90pe_extended) {
+        cout << "✓ COUNTS MATCH - Good!" << endl;
+    } else {
+        cout << "✗ COUNTS DO NOT MATCH - There's a problem!" << endl;
+    }
+    cout << "======================================" << endl;
 
     if (!cosmic_counts.empty()) {
         saveCosmicFluxToCSV(cosmic_counts, OUTPUT_DIR);
@@ -883,8 +909,7 @@ int main(int argc, char *argv[]) {
     gStyle->SetOptStat(1111);
     gStyle->SetOptFit(1111);
 
-    // ==== ALL ORIGINAL PLOTS - RETAINED ====
-    
+    // Plot Muon Energy
     c->Clear();
     h_muon_energy->SetLineColor(kBlue);
     h_muon_energy->Draw();
@@ -893,6 +918,7 @@ int main(int argc, char *argv[]) {
     c->SaveAs(plotName.c_str());
     cout << "Saved plot: " << plotName << endl;
 
+    // Plot All Muon Energy
     c->Clear();
     h_muon_all->SetLineColor(kBlue);
     h_muon_all->Draw();
@@ -901,6 +927,7 @@ int main(int argc, char *argv[]) {
     c->SaveAs(plotName.c_str());
     cout << "Saved plot: " << plotName << endl;
 
+    // Plot Michel Energy
     c->Clear();
     h_michel_energy->SetLineColor(kRed);
     h_michel_energy->Draw();
@@ -909,6 +936,7 @@ int main(int argc, char *argv[]) {
     c->SaveAs(plotName.c_str());
     cout << "Saved plot: " << plotName << endl;
 
+    // Plot Michel dt with exponential fit
     c->Clear();
     h_dt_michel->SetLineWidth(2);
     h_dt_michel->SetLineColor(kBlack);
@@ -1121,6 +1149,7 @@ int main(int argc, char *argv[]) {
         cout << "Skipping fit start comparison - insufficient entries in dt histogram" << endl;
     }
 
+    // Plot Energy vs dt
     c->Clear();
     h_energy_vs_dt->SetStats(0);
     h_energy_vs_dt->GetXaxis()->SetTitle("dt (#mus)");
@@ -1130,6 +1159,7 @@ int main(int argc, char *argv[]) {
     c->SaveAs(plotName.c_str());
     cout << "Saved plot: " << plotName << endl;
 
+    // Plot Side Veto Muon
     c->Clear();
     h_side_vp_muon->SetLineColor(kMagenta);
     h_side_vp_muon->Draw();
@@ -1138,6 +1168,7 @@ int main(int argc, char *argv[]) {
     c->SaveAs(plotName.c_str());
     cout << "Saved plot: " << plotName << endl;
 
+    // Plot Top Veto Muon
     c->Clear();
     h_top_vp_muon->SetLineColor(kCyan);
     h_top_vp_muon->Draw();
@@ -1146,6 +1177,7 @@ int main(int argc, char *argv[]) {
     c->SaveAs(plotName.c_str());
     cout << "Saved plot: " << plotName << endl;
 
+    // Plot Trigger Bits
     c->Clear();
     h_trigger_bits->SetLineColor(kGreen);
     h_trigger_bits->Draw();
@@ -1154,8 +1186,10 @@ int main(int argc, char *argv[]) {
     c->SaveAs(plotName.c_str());
     cout << "Saved plot: " << plotName << endl;
 
+    // Create veto panel plots
     createVetoPanelPlots(h_veto_panel, OUTPUT_DIR);
 
+    // Plot Isolated PE
     c->Clear();
     h_isolated_pe->SetLineColor(kBlack);
     h_isolated_pe->Draw();
@@ -1164,6 +1198,7 @@ int main(int argc, char *argv[]) {
     c->SaveAs(plotName.c_str());
     cout << "Saved plot: " << plotName << endl;
 
+    // Plot Low Energy Isolated
     c->Clear();
     h_low_iso->SetLineColor(kBlack);
     h_low_iso->Draw();
@@ -1172,6 +1207,7 @@ int main(int argc, char *argv[]) {
     c->SaveAs(plotName.c_str());
     cout << "Saved plot: " << plotName << endl;
 
+    // Plot High Energy Isolated
     c->Clear();
     h_high_iso->SetLineColor(kBlack);
     h_high_iso->Draw();
@@ -1180,6 +1216,7 @@ int main(int argc, char *argv[]) {
     c->SaveAs(plotName.c_str());
     cout << "Saved plot: " << plotName << endl;
 
+    // Plot DeltaT High to Low
     c->Clear();
     h_dt_prompt_delayed->SetLineColor(kBlack);
     h_dt_prompt_delayed->Draw();
@@ -1188,6 +1225,7 @@ int main(int argc, char *argv[]) {
     c->SaveAs(plotName.c_str());
     cout << "Saved plot: " << plotName << endl;
 
+    // Plot DeltaT Low to Muon with fit
     TCanvas *c_low_muon = new TCanvas("c_low_muon", "DeltaT Low to Muon", 1200, 800);
     c_low_muon->SetLeftMargin(0.15);
     c_low_muon->SetRightMargin(0.08);
@@ -1266,7 +1304,7 @@ int main(int argc, char *argv[]) {
         cout << Form("χ²/NDF = %.4f", chi2_ndf) << endl;
         cout << "----------------------------------------" << endl;
 
-        // ==== NEUTRON PURITY ANALYSIS ====
+        // Neutron Purity Analysis
         cout << "=== Neutron Purity Analysis ===" << endl;
 
         double bw = h_dt_low_muon->GetBinWidth(1);
@@ -1303,6 +1341,7 @@ int main(int argc, char *argv[]) {
 
     if (expFit_low_muon) delete expFit_low_muon;
 
+    // Plot DeltaT High to Muon with fit
     TCanvas *c_high_muon = new TCanvas("c_high_muon", "DeltaT High to Muon", 1200, 800);
     c_high_muon->SetLeftMargin(0.12);
     c_high_muon->SetRightMargin(0.08);
@@ -1392,7 +1431,7 @@ int main(int argc, char *argv[]) {
 
     if (expFit_high_muon) delete expFit_high_muon;
 
-    // ==== NEW MICHEL BACKGROUND SUBTRACTION FOR LOW ENERGY SIDEBAND ====
+    // ==== MICHEL BACKGROUND SUBTRACTION FOR LOW ENERGY SIDEBAND ====
     cout << "=== Michel Background Subtraction for Low Energy Sideband Analysis ===" << endl;
 
     double N0_fit = 0, tau_fit = 0, C_fit = 0;
@@ -1401,22 +1440,22 @@ int main(int argc, char *argv[]) {
     double predicted_michels = 0;
 
     if (h_dt_michel_sideband->GetEntries() > 20) {
-        TF1* michel_fit = new TF1("michel_fit", ExpFit, 0.76, 16.0, 3);
+        TF1* michel_fit = new TF1("michel_fit", ExpFit, 1.0, 16.0, 3);
         michel_fit->SetParNames("N_{0}", "#tau", "C");
         
-        // Better initial parameters for Michel decay
+        // Initial parameters for Michel decay
         double integral = h_dt_michel_sideband->Integral();
         double bin_width = h_dt_michel_sideband->GetBinWidth(1);
-        double N0_init = integral * 2.2; // Rough estimate
-        double tau_init = 2.2; // Michel lifetime
-        double C_init = h_dt_michel_sideband->GetBinContent(h_dt_michel_sideband->FindBin(15.0)); // Late time background
+        double N0_init = integral * 2.2;
+        double tau_init = 2.2;
+        double C_init = h_dt_michel_sideband->GetBinContent(h_dt_michel_sideband->FindBin(15.0));
         
         michel_fit->SetParameters(N0_init, tau_init, C_init);
         michel_fit->SetParLimits(0, 0, N0_init * 10);
-        michel_fit->SetParLimits(1, 1.0, 3.0); // Constrain to physical Michel lifetime
+        michel_fit->SetParLimits(1, 1.0, 3.0);
         michel_fit->SetParLimits(2, 0, C_init * 5);
         
-        int fit_status = h_dt_michel_sideband->Fit(michel_fit, "RE+", "", 0.76, 16.0);
+        int fit_status = h_dt_michel_sideband->Fit(michel_fit, "RE+", "", 1.0, 16.0);
         
         if (fit_status == 0) {
             N0_fit = michel_fit->GetParameter(0);
@@ -1433,14 +1472,52 @@ int main(int argc, char *argv[]) {
             cout << Form("C = %.1f ± %.1f", C_fit, C_err) << endl;
             cout << Form("χ²/NDF = %.2f", chi2_ndf_fit) << endl;
             
-            // Predict Michel events in signal region (16-100 μs)
-            if (tau_fit > 0) {
-                predicted_michels = N0_fit * (exp(-SIGNAL_REGION_MIN/tau_fit) - exp(-SIGNAL_REGION_MAX/tau_fit));
-                //predicted_michels += C_fit * (SIGNAL_REGION_MAX - SIGNAL_REGION_MIN); // Constant background
-            }
-            
-            cout << Form("Predicted Michel events in 16-100 μs: %.1f", predicted_michels) << endl;
-            
+        
+// CORRECTED: Predict Michel events by summing over small time bins from 16 to 100 μs
+predicted_michels = 0.0;
+if (tau_fit > 0) {
+    const double TIME_BIN_SIZE = 0.1; // 0.1 μs bin size
+    
+    cout << "Computing Michel prediction using discrete time bin summation:" << endl;
+    cout << "Time range: " << SIGNAL_REGION_MIN << " to " << SIGNAL_REGION_MAX << " μs" << endl;
+    cout << "Time bin size: " << TIME_BIN_SIZE << " μs" << endl;
+    
+    // Debug: Print fit parameters to verify they're reasonable
+    cout << "Fit parameters: N0=" << N0_fit << ", τ=" << tau_fit << ", C=" << C_fit << endl;
+    
+    int bin_count = 0;
+    for (int i = 0; i < 840; i++) { // 84.0 μs / 0.1 μs = 840 bins exactly
+        double t_start = 16.0 + i * TIME_BIN_SIZE;
+        double t_end = t_start + TIME_BIN_SIZE;
+        double t_center = t_start + (TIME_BIN_SIZE / 2.0);
+        
+        // Ensure we don't exceed 100 μs
+        if (t_end > 100.0) break;
+        
+        // Calculate N(t) = N0 * exp(-t/τ) + C at this bin center
+        double N_t = N0_fit * exp(-t_center / tau_fit);
+        
+        // Expected events in this time bin = N(t) × bin size
+        //double bin_events = N_t * TIME_BIN_SIZE;
+            double bin_events = N_t;
+        
+        predicted_michels += bin_events;
+        bin_count++;
+        
+        // Debug output with proper formatting
+        if (i < 5 || i % 100 == 0 || i >= 835) {
+            cout << Form("  Bin %3d: %5.1f-%5.1f μs (center=%5.2f μs), N(t)=%6.3f, events=%6.3f", 
+                        i, t_start, t_end, t_center, N_t, bin_events) << endl;
+        }
+    }
+    
+    cout << Form("Total predicted Michel events: %.1f", predicted_michels) << endl;
+    cout << "Number of bins: " << bin_count << endl;
+    
+    // Verify the calculation makes sense
+    cout << "Verification: First bin N(16.05) = " << (N0_fit * exp(-16.05 / tau_fit) + C_fit) << endl;
+    cout << "Verification: Last bin N(99.95) = " << (N0_fit * exp(-99.95 / tau_fit) + C_fit) << endl;
+}
         } else {
             cout << "Warning: Michel fit failed with status " << fit_status << endl;
         }
@@ -1451,13 +1528,13 @@ int main(int argc, char *argv[]) {
              << h_dt_michel_sideband->GetEntries() << endl;
     }
 
-    // ==== PERFORM FINAL BACKGROUND SUBTRACTION FOR LOW ENERGY ANALYSIS ====
+    // Perform final background subtraction for low energy analysis
     double signal_events = calculateTotalEvents(h_low_pe_signal);
     double sideband_events = calculateTotalEvents(h_low_pe_sideband);
     
     // Scale neutron-free background
     TH1D* h_scaled_sideband = (TH1D*)h_low_pe_sideband->Clone("scaled_sideband");
-    double neutron_free_scale = (SIGNAL_REGION_MAX - SIGNAL_REGION_MIN) / (1200.0 - 1000.0); // 84/200 = 0.42
+    double neutron_free_scale = (SIGNAL_REGION_MAX - SIGNAL_REGION_MIN) / (1200.0 - 1000.0);
     h_scaled_sideband->Scale(neutron_free_scale);
     
     // Create Michel background template for 16-100 μs prediction
@@ -1483,16 +1560,17 @@ int main(int argc, char *argv[]) {
     cout << "Michel background scaling factor: " << michel_scale << endl;
     cout << "Final subtracted events: " << final_events << endl;
 
-    // ==== PLOT THE NEW MICHEL BACKGROUND SUBTRACTION ====
+    // Plot Michel background subtraction with log Y-axis
     TCanvas *c_michel_method = new TCanvas("c_michel_method", "Michel Background Subtraction Method", 1200, 800);
     c_michel_method->Divide(2, 1);
     
-    // Plot 1: Time distribution fit
+    // Plot 1: Time distribution fit with log Y-axis
     c_michel_method->cd(1);
     gPad->SetLeftMargin(0.12);
     gPad->SetRightMargin(0.08);
     gPad->SetBottomMargin(0.12);
     gPad->SetTopMargin(0.08);
+    gPad->SetLogy();
     
     h_dt_michel_sideband->SetLineColor(kBlue);
     h_dt_michel_sideband->SetLineWidth(2);
@@ -1507,12 +1585,13 @@ int main(int argc, char *argv[]) {
         michel_fit_plot->Draw("SAME");
     }
     
-    // Plot 2: Energy spectrum comparison (0-16 μs actual vs 16-100 μs predicted)
+    // Plot 2: Energy spectrum comparison with log Y-axis
     c_michel_method->cd(2);
     gPad->SetLeftMargin(0.12);
     gPad->SetRightMargin(0.08);
     gPad->SetBottomMargin(0.12);
     gPad->SetTopMargin(0.08);
+    gPad->SetLogy();
     
     h_michel_energy_sideband->SetLineColor(kBlue);
     h_michel_energy_sideband->SetLineWidth(2);
@@ -1522,11 +1601,11 @@ int main(int argc, char *argv[]) {
     // Plot predicted Michel spectrum for 16-100 μs
     h_michel_energy_predicted->SetLineColor(kRed);
     h_michel_energy_predicted->SetLineWidth(2);
-    h_michel_energy_predicted->SetLineStyle(2); // Dashed for prediction
+    h_michel_energy_predicted->SetLineStyle(2);
     h_michel_energy_predicted->SetStats(0);
     h_michel_energy_predicted->Draw("HIST SAME");
     
-    // Add clean legend
+    // Add legend
     TLegend *leg_energy = new TLegend(0.15, 0.80, 0.45, 0.93);
     leg_energy->SetBorderSize(0);
     leg_energy->SetFillStyle(0);
@@ -1540,8 +1619,7 @@ int main(int argc, char *argv[]) {
     c_michel_method->SaveAs(plotName.c_str());
     cout << "Saved Michel background subtraction plot: " << plotName << endl;
 
-    // ==== RETAIN ALL ORIGINAL LOW ENERGY PLOTS ====
-    
+    // Plot Isolated GE40 PE
     c->Clear();
     h_isolated_ge40->SetLineColor(kBlack);
     h_isolated_ge40->Draw();
@@ -1550,7 +1628,7 @@ int main(int argc, char *argv[]) {
     c->SaveAs(plotName.c_str());
     cout << "Saved plot: " << plotName << endl;
 
-    // Plot Neutron Purity Analysis with larger axis titles
+    // Plot Neutron Purity Analysis
     c->Clear();
     c->Divide(1,2);
     
@@ -1601,9 +1679,7 @@ int main(int argc, char *argv[]) {
     c->SaveAs(plotName.c_str());
     cout << "Saved plot: " << plotName << endl;
 
-    // ==== ORIGINAL LOW ENERGY SIDEBAND SUBTRACTION PLOTS (RETAINED) ====
-    
-    // Plot 1: Original sideband subtraction
+    // Plot Low Energy Sideband Subtraction
     TCanvas *c_sideband1 = new TCanvas("c_sideband1", "Low Energy Sideband Subtraction", 1200, 800);
     c_sideband1->SetLeftMargin(0.1);
     c_sideband1->SetRightMargin(0.1);
@@ -1641,7 +1717,7 @@ int main(int argc, char *argv[]) {
     c_sideband1->SaveAs(plotName.c_str());
     cout << "Saved plot: " << plotName << endl;
 
-    // Plot 2: Complete three-component subtraction (original method)
+    // Plot Complete three-component subtraction
     TCanvas *c_sideband2 = new TCanvas("c_sideband2", "Low Energy Sideband Subtraction with Michel Background", 1200, 800);
     c_sideband2->SetLeftMargin(0.1);
     c_sideband2->SetRightMargin(0.1);
