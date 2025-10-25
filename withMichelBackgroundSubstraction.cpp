@@ -1,4 +1,4 @@
-#include <TFile.h>   
+#include <TFile.h>
 #include <TTree.h>
 #include <TBranch.h>
 #include <TH1D.h>
@@ -1473,7 +1473,7 @@ int main(int argc, char *argv[]) {
             cout << Form("χ²/NDF = %.2f", chi2_ndf_fit) << endl;
             
         
-// CORRECTED: Predict Michel events by summing over small time bins from 16 to 100 μs
+//Predict Michel events by summing over small time bins from 16 to 100 μs
 predicted_michels = 0.0;
 if (tau_fit > 0) {
     const double TIME_BIN_SIZE = 0.1; // 0.1 μs bin size
@@ -1497,8 +1497,6 @@ if (tau_fit > 0) {
         // Calculate N(t) = N0 * exp(-t/τ) + C at this bin center
         double N_t = N0_fit * exp(-t_center / tau_fit);
         
-        // Expected events in this time bin = N(t) × bin size
-        //double bin_events = N_t * TIME_BIN_SIZE;
             double bin_events = N_t;
         
         predicted_michels += bin_events;
@@ -1610,8 +1608,8 @@ if (tau_fit > 0) {
     leg_energy->SetBorderSize(0);
     leg_energy->SetFillStyle(0);
     leg_energy->SetTextSize(0.045);
-    leg_energy->AddEntry(h_michel_energy_sideband, "Michel (0-16 #mus) Actual", "l");
-    leg_energy->AddEntry(h_michel_energy_predicted, "Michel (16-100 #mus) Predicted", "l");
+    leg_energy->AddEntry(h_michel_energy_sideband, "0-16 #mus", "l");
+    leg_energy->AddEntry(h_michel_energy_predicted, "16-100 #mus", "l");
     leg_energy->Draw();
     
     c_michel_method->Update();
