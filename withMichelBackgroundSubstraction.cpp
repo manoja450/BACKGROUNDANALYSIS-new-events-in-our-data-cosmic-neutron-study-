@@ -47,14 +47,14 @@ const double MICHEL_ENERGY_MAX = 1000;  // Max PMT energy for Michel (p.e.)
 const double MICHEL_ENERGY_MAX_DT = 500; // Max PMT energy for dt plots (p.e.)
 const double MICHEL_DT_MIN = 0.76;      // Min time after muon for Michel (µs)
 const double MICHEL_DT_MAX = 16.0;      // Max time after muon for Michel (µs)
-const double MICHEL_DT_MIN_EXTENDED = 0.76;      // Min time for extended Michel search (µs)
+const double MICHEL_DT_MIN_EXTENDED = 0;      // Min time for extended Michel search (µs)
 const double MICHEL_DT_MAX_EXTENDED = 16.0;     // Max time for extended Michel search (µs)
 const double MICHEL_ENERGY_MAX_EXTENDED = 100.0; // Max energy for extended Michel (p.e.)
 const int ADCSIZE = 45;                 // Number of ADC samples per waveform
 const double LOW_ENERGY_DT_MIN = 16.0;  // Min time after muon for low-energy isolated events (µs)
 const std::vector<double> SIDE_VP_THRESHOLDS = {750, 950, 1200, 1400, 550, 700, 700, 500}; // Channels 12-19 (ADC)
 const double TOP_VP_THRESHOLD = 450; // Original threshold
-const double FIT_MIN = 1.0; // Fit range min for Michel dt (µs)
+const double FIT_MIN = 2.0; // Fit range min for Michel dt (µs)
 const double FIT_MAX = 16.0; // Fit range max for Michel dt (µs)
 const double FIT_MIN_LOW_MUON = 16.0; // Fit range min for low to muon dt (µs)
 const double FIT_MAX_LOW_MUON = 1200.0; // Fit range max for low to muon dt (µs)
@@ -62,6 +62,10 @@ const double FIT_MAX_LOW_MUON = 1200.0; // Fit range max for low to muon dt (µs
 // Michel background prediction constants
 const double SIGNAL_REGION_MIN = 16.0;    // Signal region start (µs)
 const double SIGNAL_REGION_MAX = 100.0;   // Signal region end (µs)
+
+// ADD THESE NEW CONSTANTS FOR MICHEL BACKGROUND SUBTRACTION
+const double MICHEL_BKG_FIT_MIN = 2.0;    // Fit range min for Michel background (µs)
+const double MICHEL_BKG_FIT_MAX = 16.0;   // Fit range max for Michel background (µs)
 
 // Generate unique output directory with timestamp
 string getTimestamp() {
@@ -1431,7 +1435,7 @@ int main(int argc, char *argv[]) {
 
     if (expFit_high_muon) delete expFit_high_muon;
 
-    // ==== MICHEL BACKGROUND SUBTRACTION FOR LOW ENERGY SIDEBAND ====
+        // ==== MICHEL BACKGROUND SUBTRACTION FOR LOW ENERGY SIDEBAND ====
     cout << "=== Michel Background Subtraction for Low Energy Sideband Analysis ===" << endl;
 
     double N0_fit = 0, tau_fit = 0, C_fit = 0;
@@ -1440,7 +1444,7 @@ int main(int argc, char *argv[]) {
     double predicted_michels = 0;
 
     if (h_dt_michel_sideband->GetEntries() > 20) {
-        TF1* michel_fit = new TF1("michel_fit", ExpFit, 1.0, 16.0, 3);
+        TF1* michel_fit = new TF1("michel_fit", ExpFit, MICHEL_BKG_FIT_MIN, MICHEL_BKG_FIT_MAX, 3);  // CHANGED HERE
         michel_fit->SetParNames("N_{0}", "#tau", "C");
         
         // Initial parameters for Michel decay
@@ -1455,7 +1459,7 @@ int main(int argc, char *argv[]) {
         michel_fit->SetParLimits(1, 1.0, 3.0);
         michel_fit->SetParLimits(2, 0, C_init * 5);
         
-        int fit_status = h_dt_michel_sideband->Fit(michel_fit, "RE+", "", 1.0, 16.0);
+        int fit_status = h_dt_michel_sideband->Fit(michel_fit, "RE+", "", MICHEL_BKG_FIT_MIN, MICHEL_BKG_FIT_MAX);  // CHANGED HERE
         
         if (fit_status == 0) {
             N0_fit = michel_fit->GetParameter(0);
@@ -1466,56 +1470,56 @@ int main(int argc, char *argv[]) {
             C_err = michel_fit->GetParError(2);
             chi2_ndf_fit = michel_fit->GetChisquare() / michel_fit->GetNDF();
             
-            cout << "Michel Fit Results (0-16 μs sideband):" << endl;
+            cout << "Michel Fit Results (" << MICHEL_BKG_FIT_MIN << "-" << MICHEL_BKG_FIT_MAX << " μs sideband):" << endl;  // CHANGED HERE
             cout << Form("N₀ = %.1f ± %.1f", N0_fit, N0_err) << endl;
             cout << Form("τ = %.3f ± %.3f μs", tau_fit, tau_err) << endl;
             cout << Form("C = %.1f ± %.1f", C_fit, C_err) << endl;
             cout << Form("χ²/NDF = %.2f", chi2_ndf_fit) << endl;
             
-        
-//Predict Michel events by summing over small time bins from 16 to 100 μs
-predicted_michels = 0.0;
-if (tau_fit > 0) {
-    const double TIME_BIN_SIZE = 0.1; // 0.1 μs bin size
-    
-    cout << "Computing Michel prediction using discrete time bin summation:" << endl;
-    cout << "Time range: " << SIGNAL_REGION_MIN << " to " << SIGNAL_REGION_MAX << " μs" << endl;
-    cout << "Time bin size: " << TIME_BIN_SIZE << " μs" << endl;
-    
-    // Debug: Print fit parameters to verify they're reasonable
-    cout << "Fit parameters: N0=" << N0_fit << ", τ=" << tau_fit << ", C=" << C_fit << endl;
-    
-    int bin_count = 0;
-    for (int i = 0; i < 840; i++) { // 84.0 μs / 0.1 μs = 840 bins exactly
-        double t_start = 16.0 + i * TIME_BIN_SIZE;
-        double t_end = t_start + TIME_BIN_SIZE;
-        double t_center = t_start + (TIME_BIN_SIZE / 2.0);
-        
-        // Ensure we don't exceed 100 μs
-        if (t_end > 100.0) break;
-        
-        // Calculate N(t) = N0 * exp(-t/τ) + C at this bin center
-        double N_t = N0_fit * exp(-t_center / tau_fit);
-        
-            double bin_events = N_t;
-        
-        predicted_michels += bin_events;
-        bin_count++;
-        
-        // Debug output with proper formatting
-        if (i < 5 || i % 100 == 0 || i >= 835) {
-            cout << Form("  Bin %3d: %5.1f-%5.1f μs (center=%5.2f μs), N(t)=%6.3f, events=%6.3f", 
-                        i, t_start, t_end, t_center, N_t, bin_events) << endl;
-        }
-    }
-    
-    cout << Form("Total predicted Michel events: %.1f", predicted_michels) << endl;
-    cout << "Number of bins: " << bin_count << endl;
-    
-    // Verify the calculation makes sense
-    cout << "Verification: First bin N(16.05) = " << (N0_fit * exp(-16.05 / tau_fit) + C_fit) << endl;
-    cout << "Verification: Last bin N(99.95) = " << (N0_fit * exp(-99.95 / tau_fit) + C_fit) << endl;
-}
+            // Predict Michel events by summing over small time bins from 16 to 100 μs
+            predicted_michels = 0.0;
+            if (tau_fit > 0) {
+                const double TIME_BIN_SIZE = 0.1; // 0.1 μs bin size
+                
+                cout << "Computing Michel prediction using discrete time bin summation:" << endl;
+                cout << "Time range: " << SIGNAL_REGION_MIN << " to " << SIGNAL_REGION_MAX << " μs" << endl;
+                cout << "Time bin size: " << TIME_BIN_SIZE << " μs" << endl;
+                cout << "Fit range used: " << MICHEL_BKG_FIT_MIN << "-" << MICHEL_BKG_FIT_MAX << " μs" << endl;  // ADDED
+                
+                // Debug: Print fit parameters to verify they're reasonable
+                cout << "Fit parameters: N0=" << N0_fit << ", τ=" << tau_fit << ", C=" << C_fit << endl;
+                
+                int bin_count = 0;
+                for (int i = 0; i < 840; i++) { // 84.0 μs / 0.1 μs = 840 bins exactly
+                    double t_start = 16.0 + i * TIME_BIN_SIZE;
+                    double t_end = t_start + TIME_BIN_SIZE;
+                    double t_center = t_start + (TIME_BIN_SIZE / 2.0);
+                    
+                    // Ensure we don't exceed 100 μs
+                    if (t_end > 100.0) break;
+                    
+                    // Calculate N(t) = N0 * exp(-t/τ) + C at this bin center
+                    double N_t = N0_fit * exp(-t_center / tau_fit);
+                    
+                    double bin_events = N_t;
+                    
+                    predicted_michels += bin_events;
+                    bin_count++;
+                    
+                    // Debug output with proper formatting
+                    if (i < 5 || i % 100 == 0 || i >= 835) {
+                        cout << Form("  Bin %3d: %5.1f-%5.1f μs (center=%5.2f μs), N(t)=%6.3f, events=%6.3f", 
+                                    i, t_start, t_end, t_center, N_t, bin_events) << endl;
+                    }
+                }
+                
+                cout << Form("Total predicted Michel events: %.1f", predicted_michels) << endl;
+                cout << "Number of bins: " << bin_count << endl;
+                
+                // Verify the calculation makes sense
+                cout << "Verification: First bin N(16.05) = " << (N0_fit * exp(-16.05 / tau_fit) + C_fit) << endl;
+                cout << "Verification: Last bin N(99.95) = " << (N0_fit * exp(-99.95 / tau_fit) + C_fit) << endl;
+            }
         } else {
             cout << "Warning: Michel fit failed with status " << fit_status << endl;
         }
@@ -1525,7 +1529,6 @@ if (tau_fit > 0) {
         cout << "Warning: Insufficient Michel events in sideband for fitting: " 
              << h_dt_michel_sideband->GetEntries() << endl;
     }
-
     // Perform final background subtraction for low energy analysis
     double signal_events = calculateTotalEvents(h_low_pe_signal);
     double sideband_events = calculateTotalEvents(h_low_pe_sideband);
@@ -1558,7 +1561,7 @@ if (tau_fit > 0) {
     cout << "Michel background scaling factor: " << michel_scale << endl;
     cout << "Final subtracted events: " << final_events << endl;
 
-    // Plot Michel background subtraction with log Y-axis
+       // Plot Michel background subtraction with log Y-axis
     TCanvas *c_michel_method = new TCanvas("c_michel_method", "Michel Background Subtraction Method", 1200, 800);
     c_michel_method->Divide(2, 1);
     
@@ -1576,7 +1579,7 @@ if (tau_fit > 0) {
     
     // Redraw fit if successful
     if (predicted_michels > 0) {
-        TF1* michel_fit_plot = new TF1("michel_fit_plot", ExpFit, 0.76, 16.0, 3);
+        TF1* michel_fit_plot = new TF1("michel_fit_plot", ExpFit, MICHEL_BKG_FIT_MIN, MICHEL_BKG_FIT_MAX, 3);  // CHANGED HERE
         michel_fit_plot->SetParameters(N0_fit, tau_fit, C_fit);
         michel_fit_plot->SetLineColor(kRed);
         michel_fit_plot->SetLineWidth(2);
