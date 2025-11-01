@@ -1,4 +1,3 @@
-//rough.cpp
 #include <TFile.h>
 #include <TTree.h>
 #include <TBranch.h>
@@ -547,8 +546,8 @@ int main(int argc, char *argv[]) {
     TH1D* h_dt_prompt_delayed = new TH1D("dt_prompt_delayed", "#Delta t High Energy (prompt) to Low Energy (delayed);#Delta t [#mus];Counts", 200, 0, 10000);
     TH1D* h_dt_low_muon = new TH1D("dt_low_muon", "#Delta t Low Energy Isolated to Muon Veto Tagged Events;#Delta t [#mus];Counts/10#mus", 120, 0, 1200);
     TH1D* h_dt_high_muon = new TH1D("dt_high_muon", "#Delta t High Energy Isolated to Muon Veto Tagged Events;#Delta t [#mus];Counts/10#mus", 120, 0, 1200);
-    TH1D* h_low_pe_signal = new TH1D("low_pe_signal", "Low Energy Signal Region Sideband Subtraction;Photoelectrons;Counts", 100, 0, 100);
-    TH1D* h_low_pe_sideband = new TH1D("low_pe_sideband", "Low Energy Sideband (1000-1200 #mus);Photoelectrons;Counts", 100, 0, 100);
+    TH1D* h_low_pe_signal = new TH1D("low_pe_signal", "Low Energy Signal Region Sideband Subtraction;Photoelectrons;Counts/1 p.e.", 100, 0, 100);
+    TH1D* h_low_pe_sideband = new TH1D("low_pe_sideband", "Low Energy Sideband (1000-1200 #mus);Photoelectrons;Counts/1 p.e.", 100, 0, 100);
     TH1D* h_isolated_ge40 = new TH1D("isolated_ge40", "Sum PEs Isolated Events (>=40 p.e.);Photoelectrons;Events/20 p.e.", 200, 40, 2000);
 
     // Extended Michel analysis histograms for background subtraction - WITH CONSISTENT RANGES
@@ -1656,9 +1655,25 @@ int main(int argc, char *argv[]) {
     cout << "Scaling factor (Predicted/Fit): " << michel_scale << endl;
     cout << "==================================================" << endl;
 
-    // Scale the energy spectrum from fit range to prediction range using the improved scaling factor
-    TH1D* h_michel_energy_predicted = (TH1D*)h_michel_energy_fit_range->Clone("michel_energy_predicted");
-    h_michel_energy_predicted->Scale(michel_scale);
+    // FIXED: Create Michel background using the correct predicted number
+    TH1D* h_michel_background_predicted = (TH1D*)h_michel_energy_fit_range->Clone("michel_background_predicted");
+    
+    // Scale to get exactly the predicted number of Michels
+    double current_michel_events = calculateTotalEvents(h_michel_background_predicted);
+    if (current_michel_events > 0) {
+        double correct_scale = predicted_michels / current_michel_events;
+        h_michel_background_predicted->Scale(correct_scale);
+    } else {
+        h_michel_background_predicted->Scale(0);
+    }
+
+    // Verify
+    double michel_background_events = calculateTotalEvents(h_michel_background_predicted);
+    cout << "=== VERIFICATION ===" << endl;
+    cout << "Predicted Michels from fit: " << predicted_michels << endl;
+    cout << "Actual Michels in background histogram: " << michel_background_events << endl;
+    cout << "Scaling factor used: " << (current_michel_events > 0 ? predicted_michels / current_michel_events : 0) << endl;
+    cout << "====================" << endl;
 
     // Perform final background subtraction for low energy analysis
     double signal_events = calculateTotalEvents(h_low_pe_signal);
@@ -1669,22 +1684,30 @@ int main(int argc, char *argv[]) {
     double neutron_free_scale = (SIGNAL_REGION_MAX - SIGNAL_REGION_MIN) / (1200.0 - 1000.0);
     h_scaled_sideband->Scale(neutron_free_scale);
     
-    // Create Michel background template for 16-100 μs prediction
-    TH1D* h_michel_background_predicted = (TH1D*)h_michel_energy_predicted->Clone("michel_background_predicted");
-
-    // Final subtraction: Signal - NeutronFree - MichelBackground
-    TH1D* h_final_subtracted = (TH1D*)h_low_pe_signal->Clone("final_subtracted");
-    h_final_subtracted->Add(h_scaled_sideband, -1);
-    h_final_subtracted->Add(h_michel_background_predicted, -1);
+    // FIXED: Use direct calculation instead of histogram arithmetic to avoid discrepancies
+    double scaled_sideband_events = calculateTotalEvents(h_scaled_sideband);
     
-    double final_events = calculateTotalEvents(h_final_subtracted);
+    // Direct calculation to avoid histogram arithmetic issues
+    double final_events = signal_events - scaled_sideband_events - michel_background_events;
     
     cout << "=== Final Low Energy Subtraction Results ===" << endl;
     cout << "Signal region (16-100 μs) events: " << signal_events << endl;
-    cout << "Scaled neutron-free background: " << calculateTotalEvents(h_scaled_sideband) << endl;
-    cout << "Predicted Michel background: " << predicted_michels << " ± " << predicted_michels_err << endl;
-    cout << "Michel background scaling factor: " << michel_scale << endl;
+    cout << "Scaled neutron-free background: " << scaled_sideband_events << endl;
+    cout << "Predicted Michel background: " << michel_background_events << " ± " << predicted_michels_err << endl;
+    cout << "Michel background scaling factor: " << (current_michel_events > 0 ? predicted_michels / current_michel_events : 0) << endl;
     cout << "Final subtracted events: " << final_events << endl;
+    cout << "Manual calculation: " << signal_events << " - " << scaled_sideband_events << " - " << michel_background_events << " = " << final_events << endl;
+
+    // DEBUG: Check histogram arithmetic vs direct calculation
+    cout << "=== DEBUG: Verification ===" << endl;
+    TH1D* h_final_subtracted_debug = (TH1D*)h_low_pe_signal->Clone("final_subtracted_debug");
+    h_final_subtracted_debug->Add(h_scaled_sideband, -1);
+    h_final_subtracted_debug->Add(h_michel_background_predicted, -1);
+    double debug_final_events = calculateTotalEvents(h_final_subtracted_debug);
+    cout << "Histogram arithmetic result: " << debug_final_events << endl;
+    cout << "Direct calculation result: " << final_events << endl;
+    cout << "Difference: " << debug_final_events - final_events << endl;
+    cout << "===========================" << endl;
 
     // Plot Michel background subtraction with consistent ranges
     TCanvas *c_michel_method = new TCanvas("c_michel_method", "Michel Background Subtraction Method", 1200, 800);
@@ -1733,11 +1756,11 @@ int main(int argc, char *argv[]) {
     h_michel_energy_fit_range->Draw("HIST");
 
     // Plot predicted Michel spectrum for 16-100 μs
-    h_michel_energy_predicted->SetLineColor(kRed);
-    h_michel_energy_predicted->SetLineWidth(2);
-    h_michel_energy_predicted->SetLineStyle(2);
-    h_michel_energy_predicted->SetStats(0);
-    h_michel_energy_predicted->Draw("HIST SAME");
+    h_michel_background_predicted->SetLineColor(kRed);
+    h_michel_background_predicted->SetLineWidth(2);
+    h_michel_background_predicted->SetLineStyle(2);
+    h_michel_background_predicted->SetStats(0);
+    h_michel_background_predicted->Draw("HIST SAME");
 
     // Add legend
     TLegend *leg_energy = new TLegend(0.15, 0.80, 0.45, 0.93);
@@ -1746,7 +1769,7 @@ int main(int argc, char *argv[]) {
     leg_energy->SetTextSize(0.045);
     leg_energy->AddEntry(h_michel_energy_fit_range, 
                         Form("%0.1f-%0.1f #mus", MICHEL_FIT_RANGE_MIN, MICHEL_FIT_RANGE_MAX), "l");
-    leg_energy->AddEntry(h_michel_energy_predicted, 
+    leg_energy->AddEntry(h_michel_background_predicted, 
                         Form("%0.1f-%0.1f #mus", MICHEL_PREDICTION_MIN, MICHEL_PREDICTION_MAX), "l");
     leg_energy->Draw();
 
@@ -1845,7 +1868,7 @@ int main(int argc, char *argv[]) {
     leg_sub1->SetFillStyle(0);
     leg_sub1->AddEntry(h_low_pe_signal, Form("Neutron rich region (16-100 #mus) [%.0f events]", signal_events), "l");
     leg_sub1->AddEntry(h_low_pe_sideband, Form("Neutron free region (1000-1200 #mus) [%.0f events]", sideband_events), "l");
-    leg_sub1->AddEntry(h_scaled_sideband, Form("Scaled neutron free region [%.1f events]", calculateTotalEvents(h_scaled_sideband)), "l");
+    leg_sub1->AddEntry(h_scaled_sideband, Form("Scaled neutron free region [%.1f events]", scaled_sideband_events), "l");
     leg_sub1->Draw();
 
     c_sideband1->Update();
@@ -1868,18 +1891,23 @@ int main(int argc, char *argv[]) {
     h_michel_background_predicted->SetLineColor(kMagenta);
     h_michel_background_predicted->SetLineWidth(2);
     h_michel_background_predicted->SetLineStyle(3);
-    h_final_subtracted->SetLineColor(kGreen);
-    h_final_subtracted->SetLineWidth(3);
+    
+    // Create final subtracted histogram for plotting only
+    TH1D* h_final_subtracted_plot = (TH1D*)h_low_pe_signal->Clone("final_subtracted_plot");
+    h_final_subtracted_plot->Add(h_scaled_sideband, -1);
+    h_final_subtracted_plot->Add(h_michel_background_predicted, -1);
+    h_final_subtracted_plot->SetLineColor(kGreen);
+    h_final_subtracted_plot->SetLineWidth(3);
 
     h_low_pe_signal->SetStats(0);
     h_scaled_sideband->SetStats(0);
     h_michel_background_predicted->SetStats(0);
-    h_final_subtracted->SetStats(0);
+    h_final_subtracted_plot->SetStats(0);
 
     h_low_pe_signal->Draw("HIST");
     h_scaled_sideband->Draw("HIST SAME");
     h_michel_background_predicted->Draw("HIST SAME");
-    h_final_subtracted->Draw("HIST SAME");
+    h_final_subtracted_plot->Draw("HIST SAME");
 
     TLegend *leg_sub2 = new TLegend(0.5, 0.6, 0.9, 0.9);
     leg_sub2->SetTextSize(0.025);
@@ -1887,9 +1915,9 @@ int main(int argc, char *argv[]) {
     leg_sub2->SetBorderSize(1);
     leg_sub2->SetFillStyle(0);
     leg_sub2->AddEntry(h_low_pe_signal, Form("Neutron rich region (16-100 #mus) [%.0f events]", signal_events), "l");
-    leg_sub2->AddEntry(h_scaled_sideband, Form("Scaled neutron free region [%.1f events]", calculateTotalEvents(h_scaled_sideband)), "l");
-    leg_sub2->AddEntry(h_michel_background_predicted, Form("Michel background (16-100 #mus) [%.1f #pm %.1f events]", predicted_michels, predicted_michels_err), "l");
-    leg_sub2->AddEntry(h_final_subtracted, Form("Final: Signal - ScaledBkg - Michel [%.1f events]", final_events), "l");
+    leg_sub2->AddEntry(h_scaled_sideband, Form("Scaled neutron free region [%.1f events]", scaled_sideband_events), "l");
+    leg_sub2->AddEntry(h_michel_background_predicted, Form("Michel background (16-100 #mus) [%.1f #pm %.1f events]", michel_background_events, predicted_michels_err), "l");
+    leg_sub2->AddEntry(h_final_subtracted_plot, Form("Final: Signal - ScaledBkg - Michel [%.1f events]", final_events), "l");
     leg_sub2->Draw();
 
     c_sideband2->Update();
@@ -1913,20 +1941,20 @@ int main(int argc, char *argv[]) {
     h_michel_background_predicted->SetLineColor(kMagenta);
     h_michel_background_predicted->SetLineWidth(2);
     h_michel_background_predicted->SetLineStyle(3);
-    h_final_subtracted->SetLineColor(kGreen);
-    h_final_subtracted->SetLineWidth(3);
+    h_final_subtracted_plot->SetLineColor(kGreen);
+    h_final_subtracted_plot->SetLineWidth(3);
 
     h_low_pe_signal->SetStats(0);
     h_scaled_sideband->SetStats(0);
     h_michel_background_predicted->SetStats(0);
-    h_final_subtracted->SetStats(0);
+    h_final_subtracted_plot->SetStats(0);
 
     // Set minimum to avoid log(0) issues
     h_low_pe_signal->SetMinimum(0.1);
     h_low_pe_signal->Draw("HIST");
     h_scaled_sideband->Draw("HIST SAME");
     h_michel_background_predicted->Draw("HIST SAME");
-    h_final_subtracted->Draw("HIST SAME");
+    h_final_subtracted_plot->Draw("HIST SAME");
 
     TLegend *leg_sub2_log = new TLegend(0.5, 0.6, 0.9, 0.9);
     leg_sub2_log->SetTextSize(0.025);
@@ -1934,9 +1962,9 @@ int main(int argc, char *argv[]) {
     leg_sub2_log->SetBorderSize(1);
     leg_sub2_log->SetFillStyle(0);
     leg_sub2_log->AddEntry(h_low_pe_signal, Form("Neutron rich region (16-100 #mus) [%.0f events]", signal_events), "l");
-    leg_sub2_log->AddEntry(h_scaled_sideband, Form("Scaled neutron free region [%.1f events]", calculateTotalEvents(h_scaled_sideband)), "l");
-    leg_sub2_log->AddEntry(h_michel_background_predicted, Form("Michel background (16-100 #mus) [%.1f #pm %.1f events]", predicted_michels, predicted_michels_err), "l");
-    leg_sub2_log->AddEntry(h_final_subtracted, Form("Final: Signal - ScaledBkg - Michel [%.1f events]", final_events), "l");
+    leg_sub2_log->AddEntry(h_scaled_sideband, Form("Scaled neutron free region [%.1f events]", scaled_sideband_events), "l");
+    leg_sub2_log->AddEntry(h_michel_background_predicted, Form("Michel background (16-100 #mus) [%.1f #pm %.1f events]", michel_background_events, predicted_michels_err), "l");
+    leg_sub2_log->AddEntry(h_final_subtracted_plot, Form("Final: Signal - ScaledBkg - Michel [%.1f events]", final_events), "l");
     leg_sub2_log->Draw();
 
     c_sideband2_log->Update();
@@ -1950,16 +1978,16 @@ int main(int argc, char *argv[]) {
     // Calculate proper rates based on actual live time (events per day)
     double signal_rate = signal_events / liveTimeDays;
     double sideband_rate = sideband_events / liveTimeDays;
-    double scaled_sideband_rate = calculateTotalEvents(h_scaled_sideband) / liveTimeDays;
-    double michel_rate = predicted_michels / liveTimeDays;
+    double scaled_sideband_rate = scaled_sideband_events / liveTimeDays;
+    double michel_rate = michel_background_events / liveTimeDays;
     double final_rate = final_events / liveTimeDays;
     
     cout << "=== Rate Calculation (Events per Day) ===" << endl;
     cout << "Actual Live Time: " << liveTimeDays << " days" << endl;
     cout << "Signal region (16-100 μs): " << signal_events << " events → " << signal_rate << " events/day" << endl;
     cout << "Neutron-free region (1000-1200 μs): " << sideband_events << " events → " << sideband_rate << " events/day" << endl;
-    cout << "Scaled neutron-free background: " << calculateTotalEvents(h_scaled_sideband) << " events → " << scaled_sideband_rate << " events/day" << endl;
-    cout << "Michel background: " << predicted_michels << " events → " << michel_rate << " events/day" << endl;
+    cout << "Scaled neutron-free background: " << scaled_sideband_events << " events → " << scaled_sideband_rate << " events/day" << endl;
+    cout << "Michel background: " << michel_background_events << " events → " << michel_rate << " events/day" << endl;
     cout << "Final subtracted: " << final_events << " events → " << final_rate << " events/day" << endl;
     cout << "=========================================" << endl;
     
@@ -1968,7 +1996,7 @@ int main(int argc, char *argv[]) {
     TH1D* h_low_pe_sideband_norm = (TH1D*)h_low_pe_sideband->Clone("low_pe_sideband_norm");
     TH1D* h_scaled_sideband_norm = (TH1D*)h_scaled_sideband->Clone("scaled_sideband_norm");
     TH1D* h_michel_background_predicted_norm = (TH1D*)h_michel_background_predicted->Clone("michel_background_predicted_norm");
-    TH1D* h_final_subtracted_norm = (TH1D*)h_final_subtracted->Clone("final_subtracted_norm");
+    TH1D* h_final_subtracted_norm = (TH1D*)h_final_subtracted_plot->Clone("final_subtracted_norm");
     
     // Normalize to counts per day using actual live time
     // This converts: raw events → events per day
@@ -2103,14 +2131,14 @@ int main(int argc, char *argv[]) {
     h_low_pe_signal->Draw("HIST");
     h_scaled_sideband->Draw("HIST SAME");
     h_michel_background_predicted->Draw("HIST SAME");
-    h_final_subtracted->Draw("HIST SAME");
+    h_final_subtracted_plot->Draw("HIST SAME");
     
     TLegend *leg_comp1 = new TLegend(0.5, 0.6, 0.9, 0.9);
     leg_comp1->SetTextSize(0.025);
     leg_comp1->AddEntry(h_low_pe_signal, Form("Signal: %.0f events", signal_events), "l");
-    leg_comp1->AddEntry(h_scaled_sideband, Form("Scaled bkg: %.1f events", calculateTotalEvents(h_scaled_sideband)), "l");
-    leg_comp1->AddEntry(h_michel_background_predicted, Form("Michel: %.1f events", predicted_michels), "l");
-    leg_comp1->AddEntry(h_final_subtracted, Form("Final: %.1f events", final_events), "l");
+    leg_comp1->AddEntry(h_scaled_sideband, Form("Scaled bkg: %.1f events", scaled_sideband_events), "l");
+    leg_comp1->AddEntry(h_michel_background_predicted, Form("Michel: %.1f events", michel_background_events), "l");
+    leg_comp1->AddEntry(h_final_subtracted_plot, Form("Final: %.1f events", final_events), "l");
     leg_comp1->Draw();
     
     // Right: Normalized counts
@@ -2169,8 +2197,9 @@ int main(int argc, char *argv[]) {
     // Cleanup extended Michel histograms
     delete h_dt_michel_sideband;
     delete h_michel_energy_fit_range;
-    delete h_michel_energy_predicted;
-    delete h_final_subtracted;
+    delete h_michel_background_predicted;
+    delete h_final_subtracted_plot;
+    delete h_final_subtracted_debug;
     delete h_dt_michel_fit_range;
 
     // Cleanup new histograms
@@ -2187,7 +2216,6 @@ int main(int argc, char *argv[]) {
     delete h_final_subtracted_norm;
     
     delete h_scaled_sideband;
-    delete h_michel_background_predicted;
     delete leg_energy;
     delete leg_sub1;
     delete leg_sub2;
