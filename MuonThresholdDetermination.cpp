@@ -53,10 +53,30 @@ const string OUTPUT_DIR = "./MuonThresholdDetermination_" + getTimestamp();
 const std::vector<double> SIDE_VP_THRESHOLDS = {1100, 1100, 1500, 1800, 850, 900, 900, 800};
 const double TOP_VP_THRESHOLD = 600;
 
+// Color scheme for different veto panel groups
+// Group 1: Panels 12-15 (Blue shades)
+// Group 2: Panels 16-19 (Green shades) 
+// Group 3: Top Panels 20-21 (Red shades)
+const int VETO_PANEL_COLORS[10] = {
+    kBlue,        // Panel 12
+    kBlue,      // Panel 13
+    kBlue,      // Panel 14
+    kBlue,      // Panel 15
+    kGreen,     // Panel 16
+    kGreen,     // Panel 17
+    kGreen,     // Panel 18
+    kGreen,     // Panel 19
+    kRed,         // Panel 20
+    kRed       // Panel 21
+};
+
 // Forward declarations
 void createSummaryCanvas(TH1D* h_veto_panel[10], TH1D* h_top_veto_combined, TF1* fit_functions[9], const string& outputDir);
+void createSummaryCanvasNoFit(TH1D* h_veto_panel[10], TH1D* h_top_veto_combined, const string& outputDir);
 TF1* createTopVetoCombinedPlot(TH1D* h_top_veto_combined, const string& outputDir);
+void createTopVetoCombinedPlotNoFit(TH1D* h_top_veto_combined, const string& outputDir);
 void createVetoPanelPlots(TH1D* h_veto_panel[10], TH1D* h_top_veto_combined, const string& outputDir);
+void createVetoPanelPlotsNoFit(TH1D* h_veto_panel[10], TH1D* h_top_veto_combined, const string& outputDir);
 
 // Pulse structure
 struct pulse {
@@ -133,9 +153,9 @@ void createOutputDirectory(const string& dirName) {
     }
 }
 
-// New function to create summary canvas with all 9 plots
+// New function to create summary canvas with all 9 plots (WITH FIT)
 void createSummaryCanvas(TH1D* h_veto_panel[10], TH1D* h_top_veto_combined, TF1* fit_functions[9], const string& outputDir) {
-    cout << "\n=== Creating Summary Canvas with All 9 Veto Panel Plots ===" << endl;
+    cout << "\n=== Creating Summary Canvas with All 9 Veto Panel Plots (With Landau Fits) ===" << endl;
     
     // Create a large canvas divided into 3x3 grid
     TCanvas *c_summary = new TCanvas("c_veto_summary", 
@@ -149,22 +169,45 @@ void createSummaryCanvas(TH1D* h_veto_panel[10], TH1D* h_top_veto_combined, TF1*
     gStyle->SetOptStat(1110); // Only show entries, mean, std dev (SAME AS INDIVIDUAL)
     gStyle->SetOptFit(0);     // Hide fit statistics completely (SAME AS INDIVIDUAL)
     
-    // Plot side veto panels (12-19) in first 8 pads
+    // PLOT COMBINED TOP VETO PANELS (20+21) FIRST in position 1
+    c_summary->cd(1);
+    gPad->SetLogy();
+    
+    // Configure combined top veto histogram with RED color
+    h_top_veto_combined->SetLineColor(kBlack);
+    h_top_veto_combined->SetLineWidth(1);
+    h_top_veto_combined->SetFillColor(kRed);
+    h_top_veto_combined->SetFillStyle(3003);
+    
+    // Draw histogram (this will automatically show the default stat box)
+    h_top_veto_combined->Draw("hist");
+    
+    // Use the stored fit function for combined top veto (position 8 in fit_functions array)
+    if (fit_functions[8]) {
+        fit_functions[8]->SetLineColor(kRed);
+        fit_functions[8]->SetLineWidth(2);
+        fit_functions[8]->Draw("same");
+    }
+    
+    // Update the pad to ensure stat box is drawn
+    gPad->Update();
+    
+    // Plot side veto panels (12-19) in positions 2-9
     for (int i = 0; i < 8; i++) {
         if (h_veto_panel[i]->GetEntries() < 10) {
             cout << "Skipping veto panel " << i+12 << " in summary - insufficient entries" << endl;
             continue;
         }
         
-        c_summary->cd(i+1); // Pads 1-8
+        c_summary->cd(i+2); // Pads 2-9 (since pad 1 is now top veto)
         
         // Set log scale for current pad
         gPad->SetLogy();
         
-        // Configure histogram appearance
+        // Configure histogram appearance with group-based colors
         h_veto_panel[i]->SetLineColor(kBlack);
         h_veto_panel[i]->SetLineWidth(1);
-        h_veto_panel[i]->SetFillColor(kBlue);
+        h_veto_panel[i]->SetFillColor(VETO_PANEL_COLORS[i]);
         h_veto_panel[i]->SetFillStyle(3003);
         
         // Draw histogram (this will automatically show the default stat box)
@@ -181,48 +224,98 @@ void createSummaryCanvas(TH1D* h_veto_panel[10], TH1D* h_top_veto_combined, TF1*
         gPad->Update();
     }
     
-    // Plot combined top veto panels (20+21) in the last pad (position 9)
-    c_summary->cd(9);
+    // Update the canvas
+    c_summary->Update();
+    
+    // Save the summary canvas
+    string summaryName = outputDir + "/All_Veto_Panels_Summary_WithFits.png";
+    c_summary->SaveAs(summaryName.c_str());
+    cout << "Saved summary canvas with fits: " << summaryName << endl;
+    
+    // Also save as PDF
+    string summaryPdf = outputDir + "/All_Veto_Panels_Summary_WithFits.pdf";
+    c_summary->SaveAs(summaryPdf.c_str());
+    
+    delete c_summary;
+    cout << "=== Summary Canvas With Fits Complete ===" << endl;
+}
+
+// New function to create summary canvas with all 9 plots (WITHOUT FIT)
+void createSummaryCanvasNoFit(TH1D* h_veto_panel[10], TH1D* h_top_veto_combined, const string& outputDir) {
+    cout << "\n=== Creating Summary Canvas with All 9 Veto Panel Plots (Energy Deposition Only) ===" << endl;
+    
+    // Create a large canvas divided into 3x3 grid
+    TCanvas *c_summary = new TCanvas("c_veto_summary_nofit", 
+                                    "Summary - All Veto Panel Energy Distributions", 
+                                    2400, 1800);
+    
+    // Divide canvas into 3x3 grid
+    c_summary->Divide(3, 3);
+    
+    // Configure style for summary plots - SAME AS INDIVIDUAL PLOTS
+    gStyle->SetOptStat(1110); // Only show entries, mean, std dev (SAME AS INDIVIDUAL)
+    gStyle->SetOptFit(0);     // Hide fit statistics completely (SAME AS INDIVIDUAL)
+    
+    // PLOT COMBINED TOP VETO PANELS (20+21) FIRST in position 1
+    c_summary->cd(1);
     gPad->SetLogy();
     
-    // Configure combined top veto histogram
+    // Configure combined top veto histogram with RED color
     h_top_veto_combined->SetLineColor(kBlack);
     h_top_veto_combined->SetLineWidth(1);
-    h_top_veto_combined->SetFillColor(kGreen);
+    h_top_veto_combined->SetFillColor(kRed);
     h_top_veto_combined->SetFillStyle(3003);
     
     // Draw histogram (this will automatically show the default stat box)
     h_top_veto_combined->Draw("hist");
     
-    // Use the stored fit function for combined top veto (position 8 in fit_functions array)
-    if (fit_functions[8]) {
-        fit_functions[8]->SetLineColor(kRed);
-        fit_functions[8]->SetLineWidth(2);
-        fit_functions[8]->Draw("same");
-    }
-    
     // Update the pad to ensure stat box is drawn
     gPad->Update();
+    
+    // Plot side veto panels (12-19) in positions 2-9
+    for (int i = 0; i < 8; i++) {
+        if (h_veto_panel[i]->GetEntries() < 10) {
+            cout << "Skipping veto panel " << i+12 << " in summary (no fit) - insufficient entries" << endl;
+            continue;
+        }
+        
+        c_summary->cd(i+2); // Pads 2-9 (since pad 1 is now top veto)
+        
+        // Set log scale for current pad
+        gPad->SetLogy();
+        
+        // Configure histogram appearance with group-based colors
+        h_veto_panel[i]->SetLineColor(kBlack);
+        h_veto_panel[i]->SetLineWidth(1);
+        h_veto_panel[i]->SetFillColor(VETO_PANEL_COLORS[i]);
+        h_veto_panel[i]->SetFillStyle(3003);
+        
+        // Draw histogram (this will automatically show the default stat box)
+        h_veto_panel[i]->Draw("hist");
+        
+        // Update the pad to ensure stat box is drawn
+        gPad->Update();
+    }
     
     // Update the canvas
     c_summary->Update();
     
     // Save the summary canvas
-    string summaryName = outputDir + "/All_Veto_Panels_Summary.png";
+    string summaryName = outputDir + "/All_Veto_Panels_Summary_EnergyOnly.png";
     c_summary->SaveAs(summaryName.c_str());
-    cout << "Saved summary canvas: " << summaryName << endl;
+    cout << "Saved summary canvas without fits: " << summaryName << endl;
     
     // Also save as PDF
-    string summaryPdf = outputDir + "/All_Veto_Panels_Summary.pdf";
+    string summaryPdf = outputDir + "/All_Veto_Panels_Summary_EnergyOnly.pdf";
     c_summary->SaveAs(summaryPdf.c_str());
     
     delete c_summary;
-    cout << "=== Summary Canvas Complete ===" << endl;
+    cout << "=== Summary Canvas Without Fits Complete ===" << endl;
 }
 
 // Modified to return the fit function
 TF1* createTopVetoCombinedPlot(TH1D* h_top_veto_combined, const string& outputDir) {
-    cout << "\n=== Creating Combined Top Veto Plot ===" << endl;
+    cout << "\n=== Creating Combined Top Veto Plot (With Landau Fit) ===" << endl;
     cout << "Entries in combined histogram: " << h_top_veto_combined->GetEntries() << endl;
     
     if (h_top_veto_combined->GetEntries() < 10) {
@@ -232,7 +325,7 @@ TF1* createTopVetoCombinedPlot(TH1D* h_top_veto_combined, const string& outputDi
     }
     
     TCanvas *c = new TCanvas("c_top_veto_combined", 
-                            "Combined Top Veto Panels 20+21 - Muon Energy Deposition", 
+                            "Combined Top Veto Panels 20+21 - Muon Energy Deposition with Landau Fit", 
                             1200, 800);
     
     // Configure style - ONLY show basic histogram stats, NO fit stats
@@ -242,10 +335,10 @@ TF1* createTopVetoCombinedPlot(TH1D* h_top_veto_combined, const string& outputDi
     // Set log scale
     c->SetLogy();
     
-    // Configure histogram
+    // Configure histogram with RED color for top panels
     h_top_veto_combined->SetLineColor(kBlack);
     h_top_veto_combined->SetLineWidth(2);
-    h_top_veto_combined->SetFillColor(kGreen);
+    h_top_veto_combined->SetFillColor(kRed);
     h_top_veto_combined->SetFillStyle(3003);
     
     // Draw histogram first (ALL DATA)
@@ -356,7 +449,7 @@ TF1* createTopVetoCombinedPlot(TH1D* h_top_veto_combined, const string& outputDi
     // Save the plot
     string plotName = outputDir + "/Top_Veto_Panels_20_21_Combined_LandauFit.png";
     c->SaveAs(plotName.c_str());
-    cout << "Saved combined top veto plot: " << plotName << endl;
+    cout << "Saved combined top veto plot with fit: " << plotName << endl;
     
     // Also save as PDF
     string pdfName = outputDir + "/Top_Veto_Panels_20_21_Combined_LandauFit.pdf";
@@ -388,14 +481,62 @@ TF1* createTopVetoCombinedPlot(TH1D* h_top_veto_combined, const string& outputDi
     delete h_top_veto_fit;
     delete c;
     
-    cout << "=== Combined Top Veto Plot Complete ===" << endl;
+    cout << "=== Combined Top Veto Plot With Fit Complete ===" << endl;
     
     // Return the drawing function for use in summary canvas
     return landauDraw;
 }
 
+// New function to create combined top veto plot without fit
+void createTopVetoCombinedPlotNoFit(TH1D* h_top_veto_combined, const string& outputDir) {
+    cout << "\n=== Creating Combined Top Veto Plot (Energy Deposition Only) ===" << endl;
+    cout << "Entries in combined histogram: " << h_top_veto_combined->GetEntries() << endl;
+    
+    if (h_top_veto_combined->GetEntries() < 10) {
+        cout << "WARNING: Combined top veto plot has very few entries: " 
+             << h_top_veto_combined->GetEntries() << endl;
+        return;
+    }
+    
+    TCanvas *c = new TCanvas("c_top_veto_combined_nofit", 
+                            "Top Veto Panel- Energy Deposition", 
+                            1200, 800);
+    
+    // Configure style - ONLY show basic histogram stats, NO fit stats
+    gStyle->SetOptStat(1110); // Only show entries, mean, std dev
+    gStyle->SetOptFit(0);     // Hide fit statistics completely
+    
+    // Set log scale
+    c->SetLogy();
+    
+    // Configure histogram with RED color for top panels
+    h_top_veto_combined->SetLineColor(kBlack);
+    h_top_veto_combined->SetLineWidth(2);
+    h_top_veto_combined->SetFillColor(kRed);
+    h_top_veto_combined->SetFillStyle(3003);
+    
+    // Draw histogram (ALL DATA)
+    h_top_veto_combined->Draw("hist");
+    
+    // Update the canvas
+    c->Update();
+    
+    // Save the plot
+    string plotName = outputDir + "/Top_Veto_Panels_20_21_Combined_EnergyOnly.png";
+    c->SaveAs(plotName.c_str());
+    cout << "Saved combined top veto plot without fit: " << plotName << endl;
+    
+    // Also save as PDF
+    string pdfName = outputDir + "/Top_Veto_Panels_20_21_Combined_EnergyOnly.pdf";
+    c->SaveAs(pdfName.c_str());
+    
+    delete c;
+    cout << "=== Combined Top Veto Plot Without Fit Complete ===" << endl;
+}
+
+// Create individual veto panel plots with fits
 void createVetoPanelPlots(TH1D* h_veto_panel[10], TH1D* h_top_veto_combined, const string& outputDir) {
-    cout << "\n=== Creating Veto Panel Plots ===" << endl;
+    cout << "\n=== Creating Veto Panel Plots (With Landau Fits) ===" << endl;
     
     // First, let's check the contents of all veto panels
     cout << "Veto Panel Entries:" << endl;
@@ -415,11 +556,11 @@ void createVetoPanelPlots(TH1D* h_veto_panel[10], TH1D* h_top_veto_combined, con
             continue;
         }
         
-        cout << "Creating plot for veto panel " << i+12 << "..." << endl;
+        cout << "Creating plot for veto panel " << i+12 << " (with fit)..." << endl;
         
         TCanvas *c = new TCanvas(Form("c_veto_%d", i+12), 
-                                Form("Veto Panel %d - Muon Energy Deposition", i+12), 
-                                1200, 800);
+                                Form("Veto Panel %d - Muon Energy Deposition with Landau Fit", i+12), 
+                                1200, 900);
         
         // Configure style - ONLY show basic histogram stats, NO fit stats
         gStyle->SetOptStat(1110); // Only show entries, mean, std dev
@@ -428,10 +569,10 @@ void createVetoPanelPlots(TH1D* h_veto_panel[10], TH1D* h_top_veto_combined, con
         // Set log scale
         c->SetLogy();
         
-        // Configure histogram
+        // Configure histogram with group-based colors
         h_veto_panel[i]->SetLineColor(kBlack);
         h_veto_panel[i]->SetLineWidth(2);
-        h_veto_panel[i]->SetFillColor(kBlue);
+        h_veto_panel[i]->SetFillColor(VETO_PANEL_COLORS[i]);
         h_veto_panel[i]->SetFillStyle(3003);
         
         // Draw histogram first (ALL DATA)
@@ -516,7 +657,7 @@ void createVetoPanelPlots(TH1D* h_veto_panel[10], TH1D* h_top_veto_combined, con
         // Save the plot
         string plotName = outputDir + Form("/Veto_Panel_%d_LandauFit.png", i+12);
         c->SaveAs(plotName.c_str());
-        cout << "Saved veto panel plot: " << plotName << endl;
+        cout << "Saved veto panel plot with fit: " << plotName << endl;
         
         // Print fit results to console only
         if (fitStatus == 0) {
@@ -533,17 +674,71 @@ void createVetoPanelPlots(TH1D* h_veto_panel[10], TH1D* h_top_veto_combined, con
     }
 
     // Create combined top veto plot and store its fit function
-    cout << "\nCreating combined top veto plot..." << endl;
+    cout << "\nCreating combined top veto plot (with fit)..." << endl;
     fit_functions[8] = createTopVetoCombinedPlot(h_top_veto_combined, outputDir);
     
-    // Create summary canvas with all 9 plots (8 side + 1 combined top)
-    cout << "\nCreating summary canvas with all 9 veto panel plots..." << endl;
+    // Create summary canvas with all 9 plots (8 side + 1 combined top) WITH FITS
+    cout << "\nCreating summary canvas with all 9 veto panel plots (with fits)..." << endl;
     createSummaryCanvas(h_veto_panel, h_top_veto_combined, fit_functions, outputDir);
     
     // Clean up fit functions
     for (int i = 0; i < 9; i++) {
         if (fit_functions[i]) delete fit_functions[i];
     }
+}
+
+// New function to create individual veto panel plots without fits
+void createVetoPanelPlotsNoFit(TH1D* h_veto_panel[10], TH1D* h_top_veto_combined, const string& outputDir) {
+    cout << "\n=== Creating Veto Panel Plots (Energy Deposition Only) ===" << endl;
+    
+    // Create individual plots for side veto panels (12-19)
+    for (int i = 0; i < 8; i++) {
+        if (h_veto_panel[i]->GetEntries() < 10) {
+            cout << "Skipping veto panel " << i+12 << " (no fit) - insufficient entries: " 
+                 << h_veto_panel[i]->GetEntries() << endl;
+            continue;
+        }
+        
+        cout << "Creating plot for veto panel " << i+12 << " (energy deposition only)..." << endl;
+        
+        TCanvas *c = new TCanvas(Form("c_veto_%d_nofit", i+12), 
+                                Form("Veto Panel %d - Energy Deposition", i+12), 
+                                1200, 800);
+        
+        // Configure style - ONLY show basic histogram stats, NO fit stats
+        gStyle->SetOptStat(1110); // Only show entries, mean, std dev
+        gStyle->SetOptFit(0);     // Hide fit statistics completely
+        
+        // Set log scale
+        c->SetLogy();
+        
+        // Configure histogram with group-based colors
+        h_veto_panel[i]->SetLineColor(kBlack);
+        h_veto_panel[i]->SetLineWidth(2);
+        h_veto_panel[i]->SetFillColor(VETO_PANEL_COLORS[i]);
+        h_veto_panel[i]->SetFillStyle(3003);
+        
+        // Draw histogram (ALL DATA)
+        h_veto_panel[i]->Draw("hist");
+        
+        // Update the canvas
+        c->Update();
+        
+        // Save the plot
+        string plotName = outputDir + Form("/Veto_Panel_%d_EnergyOnly.png", i+12);
+        c->SaveAs(plotName.c_str());
+        cout << "Saved veto panel plot without fit: " << plotName << endl;
+        
+        delete c;
+    }
+
+    // Create combined top veto plot without fit
+    cout << "\nCreating combined top veto plot (energy deposition only)..." << endl;
+    createTopVetoCombinedPlotNoFit(h_top_veto_combined, outputDir);
+    
+    // Create summary canvas with all 9 plots (8 side + 1 combined top) WITHOUT FITS
+    cout << "\nCreating summary canvas with all 9 veto panel plots (energy deposition only)..." << endl;
+    createSummaryCanvasNoFit(h_veto_panel, h_top_veto_combined, outputDir);
 }
 
 int main(int argc, char *argv[]) {
@@ -576,16 +771,16 @@ int main(int argc, char *argv[]) {
     // Histograms for veto panels (12-21) - WILL STORE ALL DATA
     TH1D* h_veto_panel[10];
     const char* veto_names[10] = {
-        "Veto Panel 12 - Energy", "Veto Panel 13 - Energy", 
-        "Veto Panel 14 - Energy", "Veto Panel 15 - Energy",
-        "Veto Panel 16 - Energy", "Veto Panel 17 - Energy", 
-        "Veto Panel 18 - Energy", "Veto Panel 19 - Energy",
-        "Veto Panel 20 - Energy", "Veto Panel 21 - Energy"
+        "Veto Panel1 Energy Deposition", "Veto Panel2 Energy Deposition", 
+        "Veto Panel3 Energy Deposition", "Veto Panel4 Energy Deposition",
+        "Veto Panel5 Energy Deposition", "Veto Panel6 Energy Deposition", 
+        "Veto Panel7 Energy Deposition", "Veto Panel8 Energy Deposition",
+        "Veto Panel 20 - Energy Deposition", "Veto Panel 21 - Energy Deposition"
     };
     
     // Combined histogram for top veto panels (20+21) - WILL STORE ALL DATA
     TH1D* h_top_veto_combined = new TH1D("h_top_veto_combined", 
-                                        "Combined Top Veto Panels 20+21 - Energy Deposition;Energy (ADC);Counts", 
+                                        "Top Veto Panel(9 and 10) Energy Deposition;Energy (ADC);Counts", 
                                         200, 200, 3000);
     
     // Initialize veto panel histograms
@@ -724,8 +919,11 @@ int main(int argc, char *argv[]) {
     }
     cout << "=====================================" << endl;
 
-    // Create plots
+    // Create plots WITH fits
     createVetoPanelPlots(h_veto_panel, h_top_veto_combined, OUTPUT_DIR);
+    
+    // Create plots WITHOUT fits
+    createVetoPanelPlotsNoFit(h_veto_panel, h_top_veto_combined, OUTPUT_DIR);
 
     // Print final summary
     cout << "\n=== Analysis Complete ===" << endl;
